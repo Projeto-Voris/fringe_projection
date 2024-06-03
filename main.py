@@ -9,8 +9,8 @@ if __name__ == '__main__':
     f.Y = 600  # set height of the fringe patterns
     f.H = 1 # color of fringes
     f.K = 1  # set number of sets (number of fringe patterns with different spatial frequencies).)
-    f.N = 4  # set number of shifts (Steps)
-    f.v = [4]  # set spatial frequencies
+    f.N = 0  # set number of shifts (Steps)
+    f.v = [2]  # set spatial frequencies
     f.D = 1 # Number of directions
     f.angle = 0 # Angle of fringes
     f.axis = 0 # Axis of fringe projection (0:x; 1:y)
@@ -18,14 +18,14 @@ if __name__ == '__main__':
 
     I = f.encode()  # encode fringe patterns
 
-    for i in range(I.shape[0]):
-        cv2.imshow('I', I[i])
-        cv2.waitKey(0)
+    # for i in range(I.shape[0]):
+    #     cv2.imshow('I', I[i])
+    #     cv2.waitKey(0)
 
 
-    # fringe = FringePattern.FringePattern(width=30, height=10, f_sin=1, steps=8)
-    # fringe.create_fringe_image()
-    # fringe.show_image()
-    # fringe.print_image()
+    fringe = FringePattern.FringePattern(width=50, height=100, f_sin=10, steps=8)
+    fringe.create_fringe_image()
+    fringe.show_image()
+    fringe.print_image()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

@@ -19,6 +19,7 @@ class FringePattern:
 
     def show_image(self):
         cv2.imshow('Image', self.image)
+        cv2.resizeWindow('Image', (50, 100))
         cv2.waitKey(0)
 
     def print_image(self):
@@ -31,15 +32,14 @@ class FringePattern:
     def create_fringe_image(self):
         x = np.arange(self.image.shape[1])
         self.sin_values = np.sin(2 * np.pi * float(self.f_sin) * x / self.image.shape[1])
-        self.sin_values = self.sin_values
+        self.sin_values = self.sin_values + 1
         y = np.sin(2 * np.pi * float(self.f_sin_px) * x / self.image.shape[1])
         plt.plot(x, self.sin_values)
-        plt.plot(x, y)
         plt.show()
         # for j in range(self.image.shape[1]):
         #     for i in range(self.image.shape[0]):
         #         self.image[i][j] = self.image[i][j] * y[j]
         for i in range(self.image.shape[1]):
-            self.image[:, i] = ((self.sin_values[i])*255 -255).astype(np.uint8)
+            self.image[:, i] = ((self.sin_values[i])*255).astype(np.uint8)
 
     # def encode_fringes_image(self):
