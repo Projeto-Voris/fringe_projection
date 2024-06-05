@@ -1,46 +1,88 @@
 import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-from numpy import matlib
-
 
 class GrayCode:
-    def __init__(self, resolution=(800, 600), n_bits=4):
+    def __init__(self, resolution=(512, 512), n_bits=4, axis=0):
         self.width = resolution[0]
         self.height = resolution[1]
-        self.n_bits = n_bits
-        self.col_prj_n = np.ceil(np.log2(self.width))
-        self.row_prj_n = np.ceil(np.log2(self.height))
-        # self.ref_pattern = np.concatenate(np.ones((self.height, self.width), dtype=np.uint8),
-        #                                   np.zeros((self.height, self.width), dtype=np.uint8))
+        self.n_bits = n_bits - 1  # Number of bits for the Gray code, adjusted to start from 0
+        self.graycode_h_seq = []  # List to store horizontal Gray code sequences
+        self.graycode_v_seq = []  # List to store vertical Gray code sequences
+        self.image_seq_h = np.zeros((resolution[1], resolution[0], self.n_bits), dtype=np.uint8)  # Horizontal Gray code images
+        self.image_seq_v = np.zeros((resolution[1], resolution[0], self.n_bits), dtype=np.uint8)  # Vertical Gray code images
+        self.images = None  # Combined image sequence
+        self.create_images(axis=axis)  # Generate the Gray code images based on the specified axis
 
-    def grays(self, n_bits):
-        if int(n_bits) == 1 or n_bits != round(n_bits, 1) or n_bits > 26:
+    def create_images(self, axis=0):
+        if axis == 0:  # If the axis is horizontal
+            self.gray_split(axis=0)  # Generate horizontal Gray code sequence
+            self.create_graycode_h_images()  # Create horizontal Gray code images
+            self.images = self.image_seq_h  # Set the images attribute to horizontal images
+
+        if axis == 1:  # If the axis is vertical
+            self.gray_split(axis=1)  # Generate vertical Gray code sequence
+            self.create_graycode_v_images()  # Create vertical Gray code images
+            self.images = self.image_seq_v  # Set the images attribute to vertical images
+
+        if axis == 2:  # If both axes are needed
+            self.gray_split(axis=0)  # Generate horizontal Gray code sequence
+            self.gray_split(axis=1)  # Generate vertical Gray code sequence
+            self.create_graycode_v_images()  # Create vertical Gray code images
+            self.create_graycode_h_images()  # Create horizontal Gray code images
+            self.images = np.concatenate((self.image_seq_h, self.image_seq_v), axis=2)  # Combine both sets of images
+
+    def get_images(self):
+        return self.images  # Return the generated images
+
+    def gray_split(self, axis=0):
+        if axis == 0:
+            size = self.width  # Use the width for horizontal splitting
+            self.graycode_h_seq.append(np.zeros(size, dtype=np.uint8))  # Initialize the horizontal sequence
+
+        else:
+            size = self.height  # Use the height for vertical splitting
+            self.graycode_v_seq.append(np.zeros(size, dtype=np.uint8))  # Initialize the vertical sequence
+
+        # Check if n_bits is within the valid range and an integer
+        if int(self.n_bits) == 1 or self.n_bits != round(self.n_bits, 1) or self.n_bits > 26:
             raise ValueError("Number of bits must be between 1 and 26")
-            # print('error')
-        gray_code = np.zeros(int(np.power(2, n_bits)), np.uint8)
-        gray_code[1] = 1
-        T = 2
-        for k in range(1, int(n_bits)):
-            T2 = T + T
-            gray_code[T + 0:T2] = T + np.flip(gray_code[0:T], axis=0)
-            T = T2
-        return gray_code
+        if size % (self.n_bits+1) != 0:  # Ensure the size is divisible by the number of bits
+            raise ValueError("Size must be divisible by number of bits")
 
-    def graycode_pattern(self, resolution, proj_n):
-        gray_de = self.grays(proj_n)
-        mat = np.transpose(np.flip(np.transpose(((gray_de[:, None] & (1 << np.arange(int(proj_n)))) > 0).astype(int))))
-        pattern_seq = np.zeros((self.height, self.width, int(2 * proj_n)), dtype=np.uint8)
-        for i in range(int(self.col_prj_n)):
-            mat2 = (np.tile(mat[:, i], (resolution, 1)))
-            # mat2 = np.transpose(np.resize(mat2, (self.width, self.height)))
-            pattern_seq[:, :, i] = mat2
-            temp = pattern_seq[:, :, i]
-            pattern_seq[:, :, i] = np.ones(temp.shape, dtype=np.uint8) - temp
-        pattern_seq[:, int(self.width / 2):, 0] = 0
-        return pattern_seq[:, :, :self.n_bits]
+        size_a = np.arange(size)  # Create a linear array of the desired length
 
-    # def concatenate(self):
-    #     col = self.graycode_pattern(self.width, self.col_prj_n)
-    #     row = self.graycode_pattern(self.height, self.row_prj_n)
-    #     return np.concatenate((self.ref_pattern, col, row), axis=2)
+        for k in range(int(self.n_bits)):  # For each bit
+            n = int(np.power(2, k))  # n = 2^k
+            seq = np.split(size_a, n)  # Split the previous array into n parts
+            row_out = np.zeros(size, np.uint8)  # Initialize the row output
+            count = 0  # Counter for Gray code
+
+            for i in range(len(seq)):
+                if count <= 2:
+                    if i % 2 == 0:
+                        row_out[seq[i:i + 1]] = 1  # Set alternating parts to 1
+                    elif i % 2 != 0:
+                        row_out[seq[i:i + 1]] = 0  # Set alternating parts to 0
+                    count += 1
+                if count > 2:
+                    if i % 2 == 0:
+                        row_out[seq[i:i + 1]] = 0  # Continue setting parts to 0 and 1 alternately
+                    elif i % 2 != 0:
+                        row_out[seq[i:i + 1]] = 1
+                    count += 1
+                if count > 4:
+                    count = 0  # Reset count after every 4 parts
+
+            if axis == 0:
+                self.graycode_h_seq.append(row_out)  # Append to horizontal sequence
+            else:
+                self.graycode_v_seq.append(row_out)  # Append to vertical sequence
+
+    def create_graycode_h_images(self):
+        for k in range(self.image_seq_h.shape[2]):  # For each bit layer
+            for i in range(self.image_seq_h.shape[0]):  # For each row
+                self.image_seq_h[i, :, k] = self.graycode_h_seq[k] * 255  # Fill the row with Gray code sequence
+
+    def create_graycode_v_images(self):
+        for k in range(self.image_seq_v.shape[2]):  # For each bit layer
+            for i in range(self.image_seq_v.shape[1]):  # For each column
+                self.image_seq_v[:, i, k] = self.graycode_v_seq[k] * 255  # Fill the column with Gray code sequence
