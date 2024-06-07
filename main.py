@@ -23,7 +23,7 @@ if __name__ == '__main__':
     #     cv2.waitKey(0)
 
 
-    fringe = FringePattern.FringePattern(width=600, height=800, f_sin=10, steps=8)
+    fringe = FringePattern.FringePattern(width=600, height=100, f_sin=4)
     fringe.create_fringe_image()
     fringe.show_image()
     fringe.print_image()
