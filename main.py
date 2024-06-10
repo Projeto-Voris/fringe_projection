@@ -1,5 +1,6 @@
 import FringePattern
 
+
 if __name__ == '__main__':
 
     fringe = FringePattern.FringePattern()
