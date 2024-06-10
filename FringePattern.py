@@ -1,8 +1,6 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-
-
 class FringePattern:
     def __init__(self, width=800, height=600, f_sin=2, steps=4):
         self.f_sin = f_sin # function sine
