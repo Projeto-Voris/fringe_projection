@@ -14,7 +14,7 @@ if __name__ == '__main__':
     img_resolution = (width, height)  # initialize image resolution
 
     for m in screeninfo.get_monitors():  # verify all monitors
-        if m.name == '\\\\.\\DISPLAY2':  # Search for projector connected a specific input port
+        if m.name == '\\\\.\\DISPLAY3':  # Search for projector connected a specific input port
             move = (m.x, m.y)  # get movement from primary display
             img_resolution = (m.width, m.height)  # get projector resolution
     cv2.setWindowProperty('projector', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)  # change window property
@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     graycode = GrayCode.GrayCode(resolution=img_resolution, n_bits=8, axis=0)  # create graycode class
     images = graycode.get_images()  # get graycode images
-    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=4, steps=4)  # create FringePattern class
+    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=4, steps=8)  # create FringePattern class
     fringe.create_fringe_image()
     image_f = fringe.get_image()  # get FringePattern images
 

@@ -90,16 +90,20 @@ class StereoCameraController:
         right_image_result.Release()
         return left_image, right_image
 
-    def save_images(self, path, counter, img_format='.png'):
-        left_image, right_image = self.capture_images()
+    def save_images(self, left, right, path, counter, img_format='.png'):
+        # left_image, right_image = self.capture_images()
+        os.makedirs(os.path.join(path, 'left'), exist_ok=True)
+        os.makedirs(os.path.join(path, 'right'), exist_ok=True)
         try:
             cv2.imwrite(os.path.join(os.path.join(path, 'left'), 'L' + str(counter).rjust(3, '0') + img_format),
-                        left_image)
+                        left)
             cv2.imwrite(os.path.join(os.path.join(path, 'right'), 'R' + str(counter).rjust(3, '0') + img_format),
-                        right_image)
+                        right)
             print('Image {} captured successfully.'.format(counter))
+            return True
         except PySpin.SpinnakerException as ex:
             print(f"Error: {ex}")
+            return False
 
     def cleanup(self):
         self.left_cam.DeInit()
