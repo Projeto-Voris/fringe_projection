@@ -7,6 +7,7 @@ from include.StereoCameraController import StereoCameraController
 import GrayCode
 import numpy as np
 import FringePattern
+import teste_trigger
 
 VISUALIZE = True
 SAVE = True
@@ -19,7 +20,7 @@ if __name__ == '__main__':
     width = 1024
     height = 1024
     img_resolution = (width, height)  # initialize image resolution
-    path = '/home/daniel/PycharmProjects/fringe_projection/teste'
+    path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
     os.makedirs(path, exist_ok=True)
 
     stereo_ctrl = StereoCameraController(left_serial=16378750, right_serial=16378734)  # set stereo cameras class
@@ -28,7 +29,7 @@ if __name__ == '__main__':
     print("Serial: {}".format(stereo_ctrl.get_serial_numbers()))
 
     for m in screeninfo.get_monitors():  # verify all monitors
-        if m.name == 'DP-3':  # '\\\\.\\DISPLAY3':  # Search for projector connected a specific input port
+        if m.name == '\\\\.\\DISPLAY3':  # '\\\\.\\DISPLAY3':  # Search for projector connected a specific input port
             move = (m.x, m.y)  # get movement from primary display
             img_resolution = (m.width, m.height)  # get projector resolution
 
@@ -43,7 +44,7 @@ if __name__ == '__main__':
 
     try:
         # Set camera parameters
-        stereo_ctrl.set_exposure_time(1666.0)  # (us) Para n ter interf. rede elétrica (60 Hz). (1/60s = 0,016 Hz)
+        stereo_ctrl.set_exposure_time(16660.0)  # (us) Para n ter interf. rede elétrica (60 Hz). (1/60s = 0,016 Hz)
         stereo_ctrl.set_exposure_mode(PySpin.ExposureAuto_Off)  # Set exposure mode to manual
         stereo_ctrl.set_gain(1)  # Set gain (dB)
         stereo_ctrl.set_image_format(PySpin.PixelFormat_Mono8)  # Set image format to Mono8 (color is BRG8)

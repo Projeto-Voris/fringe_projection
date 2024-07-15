@@ -80,15 +80,15 @@ class StereoCameraController:
         self.right_cam.EndAcquisition()
 
     def capture_images(self):
-        left_image_result = self.left_cam.GetNextImage()
-        right_image_result = self.right_cam.GetNextImage()
-        if left_image_result.IsIncomplete() or right_image_result.IsIncomplete():
-            raise Exception("Image capture incomplete.")
+        # left_image_result = self.left_cam.GetNextImage()
+        # right_image_result = self.right_cam.GetNextImage()
+        # if left_image_result.IsIncomplete() or right_image_result.IsIncomplete():
+        #     raise Exception("Image capture incomplete.")
             # Convert images to BGR8 format
-        self.img_left = left_image_result.GetNDArray()
-        self.img_right = right_image_result.GetNDArray()
-        left_image_result.Release()
-        right_image_result.Release()
+        self.img_left = self.left_cam.GetNextImage().GetNDArray()
+        self.img_right = self.right_cam.GetNextImage().GetNDArray()
+        # left_image_result.Release()
+        # right_image_result.Release()
         # return left_image, right_image
 
     def save_images(self, path, counter, img_format='.png'):
