@@ -133,23 +133,22 @@ class StereoCameraControllerTrigger:
             image_result = cam.GetNextImage()
             if image_result.IsIncomplete():
                 print("image result incomplete.")
-            # else:
-            #     width = image_result.GetWidth()
-            #     height = image_result.GetHeight()
-            #     print('width: %d, height: %d' % (width, height))
-            #
-            #     # Save image
-            #     filename = f"image_software_trigger{cam.DeviceSerialNumber.ToString()}.png"
-            #     image_result.Save(filename)
-            #     print("Image saved.")
-            #
-            #     image_result.Release()
+                return None
+            else:
+                # convert image
+                image_array = image_result.GetNDArray()
+
+                if cam == self.left_cam:
+                    self.img_left = image_array
+                elif cam == self.right_cam:
+                    self.img_right = image_array
+
+                image_result.Release()
+                return True
 
         except PySpin.SpinnakerException as ex:
             print("Error: %s" % ex)
             return False
-
-        return True
 
     def save_image_by_trigger(self, path, counter, img_format='.png'):
         os.makedirs(os.path.join(path, 'left'), exist_ok=True)
@@ -165,7 +164,7 @@ class StereoCameraControllerTrigger:
             return False
         return True
 
-    def main(self):
+    def main(self, save_path, img_format='.png'):
         try:
             # configure triggers
             if not self.configure_trigger(self.left_cam) or not self.configure_trigger(self.right_cam):
@@ -177,6 +176,7 @@ class StereoCameraControllerTrigger:
 
             if self.capture_image_by_trigger(self.left_cam) and self.capture_image_by_trigger(self.right_cam):
                 print('images acquired')
+                self.save_image_by_trigger(save_path, counter=1, img_format=img_format)
 
             self.left_cam.EndAcquisition()
             self.right_cam.EndAcquisition()
@@ -193,5 +193,6 @@ class StereoCameraControllerTrigger:
 if __name__ == '__main__':
     left_serial = 16378750
     right_serial = 16378734
+    save_path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
     controller = StereoCameraControllerTrigger(left_serial, right_serial)
-    controller.main()
+    controller.main(save_path)
