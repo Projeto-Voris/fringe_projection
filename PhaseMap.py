@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import FringePattern
 
 if __name__ == '__main__':
+    # gera imagem
     img_resolution = (1024, 1024)
     fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=8, steps=4)
     fringe.create_fringe_image()
