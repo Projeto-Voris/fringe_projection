@@ -4,7 +4,7 @@ import FringePattern
 
 if __name__ == '__main__':
     img_resolution = (1024, 1024)
-    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=1, steps=4)
+    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=8, steps=4)
     fringe.create_fringe_image()
     image = fringe.get_image()
 
@@ -23,6 +23,5 @@ if __name__ == '__main__':
 
             phi_image[u, v] = np.arctan2(-sum_sin, sum_cos)
 
-    plt.imshow(phi_image, cmap='gray')
-    plt.colorbar()
+    plt.plot(phi_image[1, :], color='gray')
     plt.show()
