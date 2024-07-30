@@ -15,7 +15,6 @@ if __name__ == '__main__':
     # Inicializar a imagem de saída
     phi_image = np.zeros((height, width))
 
-    x = np.arange(image.shape[1])
     # Calcular Phi para cada pixel
     for u in range(height):
         for v in range(width):
@@ -24,5 +23,6 @@ if __name__ == '__main__':
 
             phi_image[u, v] = np.arctan2(-sum_sin, sum_cos)
 
-    plt.plot(x, phi_image)
+    plt.imshow(phi_image, cmap='gray')
+    plt.colorbar()
     plt.show()
