@@ -6,10 +6,10 @@ import GrayCode
 if __name__ == '__main__':
     # gera imagem
     img_resolution = (1024, 1024)
-    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=3, steps=4)
+    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=5, steps=4)
     fringe.create_fringe_image()
     image = fringe.get_image()
-    graycode = GrayCode.GrayCode(resolution=img_resolution, n_bits=4)
+    graycode = GrayCode.GrayCode(resolution=img_resolution, n_bits=6)
     graycode_image = np.invert(graycode.get_images())
     graycode.show_image()
 
@@ -30,7 +30,7 @@ if __name__ == '__main__':
             qsi_image[u, v] = int(''.join(str(int(a)) for a in graycode_image[u, v, 2:]/255), 2)
             phi_image[u, v] = np.arctan2(-sum_sin, sum_cos)
             if phi_image[u, v] <= -np.pi/2:
-                phi_image_A[u, v] = phi_image[u, v] + 2 * np.pi * (qsi_image[u, v] + 1) / 2 + np.pi
+                phi_image_A[u, v] = phi_image[u, v] + 2 * np.pi * ((qsi_image[u, v] + 1) / 2) + np.pi
             elif -np.pi/2 < phi_image[u, v] < np.pi/2:
                 phi_image_A[u, v] = phi_image[u, v] + 2 * np.pi * (qsi_image[u, v]/2) + np.pi
             elif phi_image[u, v] >= np.pi/2:
