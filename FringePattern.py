@@ -10,7 +10,7 @@ class FringePattern:
         self.sin_values = []
         self.steps = steps # number of time steps
         self.image = np.zeros((int(resolution[1]), int(resolution[0]), self.steps), dtype=np.uint8) # vector image
-
+        self.create_fringe_image()
     def show_image(self): # reading last shape of vector image
         for i in range(self.image.shape[2]):
             cv2.imshow('Image', self.image[:,:,i])
@@ -29,8 +29,8 @@ class FringePattern:
             phase_shift = n * 2 * np.pi/4
             y = np.sin(2 * np.pi * float(self.f_sin) * x / self.image.shape[1] + phase_shift) + 1
             self.sin_values.append(y)
-            plt.plot(x, y)
-        plt.show()
+            # plt.plot(x, y)
+        # plt.show()
         for k in range(len(self.sin_values)):
             for i in range(self.image.shape[0]):
                 self.image[i, :, k] = (self.sin_values[k]) * 255/2
