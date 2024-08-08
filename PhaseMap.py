@@ -76,25 +76,41 @@ if __name__ == '__main__':
 
     # Calcula a imagem QSI
     qsi_image = calculate_qsi(graycode_image)
-    remap_qsi_image = remap_qsi_image(qsi_image, real_qsi_order)
+    remaped_qsi_image = remap_qsi_image(qsi_image, real_qsi_order)
 
     # Calcula a fase absoluta
-    abs_phi_image = phi_image + 2 * np.pi * remap_qsi_image
+    abs_phi_image = phi_image + 2 * np.pi * remaped_qsi_image
 
-    plt.subplot(1, 2, 1)
-    plt.plot(phi_image[1, :], color='gray')
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
-    plt.subplot(1, 2, 2)
-    plt.plot(abs_phi_image[1, :], color='gray')
+    # First subplot with dual y-axes
+    ax1.plot(phi_image[1, :], color='gray')
+    ax1.set_ylabel('Phi Image', color='gray')
+    ax1.tick_params(axis='y', labelcolor='gray')
 
-    # plt.subplot(1, 2, 3)
-    # plt.plot(remap_qsi_image[1, :], color='gray')
+    ax1_2 = ax1.twinx()
+    ax1_2.plot(remaped_qsi_image[1, :], color='red')
+    ax1_2.set_ylabel('Remaped QSI Image', color='red')
+    ax1_2.tick_params(axis='y', labelcolor='red')
 
-    plt.figure()
-    plt.subplot(2, 2, 1)
-    plt.imshow(phi_image, cmap='gray')
-    plt.colorbar()
-    plt.subplot(2, 2, 2)
-    plt.imshow(abs_phi_image, cmap='gray')
-    plt.colorbar()
-    plt.show()
+    # Second subplot
+    ax2.plot(abs_phi_image[1, :], color='gray')
+    ax2.set_title('Abs Phi Image 1D')
+    ax2.set_ylabel('Abs Phi Image')
+
+    # Third subplot with an image
+    im3 = ax3.imshow(phi_image, cmap='gray')
+    ax3.set_title('Phi Image 2D')
+    fig.colorbar(im3, ax=ax3)
+
+    # Fourth subplot with an image
+    im4 = ax4.imshow(abs_phi_image, cmap='gray')
+    ax4.set_title('Abs Phi Image 2D')
+    fig.colorbar(im4, ax=ax4)
+
+    # Add a title for the whole figure
+    fig.suptitle('Fase e Fase absoluta')
+
+# Show the plot
+plt.tight_layout()
+plt.show()
