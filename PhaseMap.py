@@ -77,6 +77,8 @@ if __name__ == '__main__':
     # Calcula a imagem QSI
     qsi_image = calculate_qsi(graycode_image)
     remap_qsi_image = remap_qsi_image(qsi_image, real_qsi_order)
+
+    # Calcula a fase absoluta
     abs_phi_image = phi_image + 2 * np.pi * remap_qsi_image
 
     plt.subplot(1, 2, 1)
