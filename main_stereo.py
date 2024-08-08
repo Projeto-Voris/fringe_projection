@@ -4,10 +4,8 @@ import cv2
 import screeninfo
 import PySpin
 from include.StereoCameraController import StereoCameraController
-import GrayCode
 import numpy as np
-import FringePattern
-import teste_trigger
+from include import FringePattern, GrayCode
 
 VISUALIZE = True
 SAVE = True

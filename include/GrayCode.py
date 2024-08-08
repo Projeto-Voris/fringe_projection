@@ -55,7 +55,10 @@ class GrayCode:
         # Check if n_bits is within the valid range and an integer
         if int(self.n_bits) == 1 or self.n_bits != round(self.n_bits, 1) or self.n_bits > 26:
             raise ValueError("Number of bits must be between 1 and 26")
+        # if size % (self.n_bits) != 0:  # Ensure the size is divisible by the number of bits
+        #     raise ValueError("Size must be divisible by number of bits")
 
+        size_a = np.arange(size)  # Create a linear array of the desired length
         self.graycode_h_seq.append(np.ones(size, dtype=np.uint8))
 
         for k in range(1, int(self.n_bits + 2)):  # For each bit

@@ -77,16 +77,7 @@ if __name__ == '__main__':
     # Calcula a imagem QSI
     qsi_image = calculate_qsi(graycode_image)
     remap_qsi_image = remap_qsi_image(qsi_image, real_qsi_order)
-    abs_phi_image = np.zeros(phi_image.shape)
-
-    for i in range(phi_image.shape[0]):
-        for j in range(phi_image.shape[1]):
-            if phi_image[i, j] <= -np.pi / 2:
-                abs_phi_image[i, j] = phi_image[i, j] + 2 * np.pi * remap_qsi_image[i, j]
-            elif -np.pi / 2 < phi_image[i, j] < np.pi / 2:
-                abs_phi_image[i, j] = phi_image[i, j] + 2 * np.pi * remap_qsi_image[i, j]
-            elif phi_image[i, j] >= np.pi / 2:
-                abs_phi_image[i, j] = phi_image[i, j] + 2 * np.pi * remap_qsi_image[i, j]
+    abs_phi_image = phi_image + 2 * np.pi * remap_qsi_image
 
     plt.subplot(1, 2, 1)
     plt.plot(phi_image[1, :], color='gray')
