@@ -1,7 +1,6 @@
 import cv2
 import screeninfo
-import GrayCode
-import FringePattern
+from include import FringePattern, GrayCode
 
 VISUALIZE = True
 
