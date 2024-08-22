@@ -80,16 +80,16 @@ class StereoCameraController:
         self.right_cam.EndAcquisition()
 
     def capture_images(self):
-        # left_image_result = self.left_cam.GetNextImage()
-        # right_image_result = self.right_cam.GetNextImage()
-        # if left_image_result.IsIncomplete() or right_image_result.IsIncomplete():
-        #     raise Exception("Image capture incomplete.")
+        left_image_result = self.left_cam.GetNextImage()
+        right_image_result = self.right_cam.GetNextImage()
+        if left_image_result.IsIncomplete() or right_image_result.IsIncomplete():
+            raise Exception("Image capture incomplete.")
             # Convert images to BGR8 format
         self.img_left = self.left_cam.GetNextImage().GetNDArray()
         self.img_right = self.right_cam.GetNextImage().GetNDArray()
-        # left_image_result.Release()
-        # right_image_result.Release()
-        # return left_image, right_image
+        left_image_result.Release()
+        right_image_result.Release()
+        return self.img_left, self.img_right
 
     def save_images(self, path, counter, img_format='.png'):
         os.makedirs(os.path.join(path, 'left'), exist_ok=True)
@@ -104,8 +104,13 @@ class StereoCameraController:
             print(f"Error: {ex}")
             return False
         return True
-    def get_images(self):
-        return self.img_left, self.img_right
+    def get_images_left(self):
+        return self.img_left
+
+    def get_images_right(self):
+        return self.img_right
+
+
     def cleanup(self):
         self.left_cam.DeInit()
         self.right_cam.DeInit()
