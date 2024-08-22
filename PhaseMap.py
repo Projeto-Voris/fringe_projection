@@ -26,11 +26,11 @@ def calculate_phi(image):
     return phi_image
 
 
-def calculate_qsi(graycode_image):
+def calculate_qsi(graycode_image, white_value):
     height, width, _ = graycode_image.shape
 
     # Converter os valores relevantes da imagem graycode para inteiros
-    bit_values = (graycode_image[:, :, 2:] / 225).astype(int)
+    bit_values = (graycode_image[:, :, 2:] / white_value).astype(int)
 
     # Converter cada linha de bits em um único número inteiro
     qsi_image = np.dot(bit_values, 2 ** np.arange(bit_values.shape[-1])[::-1])
@@ -47,12 +47,7 @@ def remap_qsi_image(qsi_image, real_qsi_order):
 
     return remapped_qsi_image
 
-def inv_power(x):
-    count = 0
-    while x != 0:
-        x = x // 2
-        count += 1
-    return count
+
 
 if __name__ == '__main__':
     # Parametro inicialziação
