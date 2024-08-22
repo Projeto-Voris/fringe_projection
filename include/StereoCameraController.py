@@ -104,12 +104,12 @@ class StereoCameraController:
             print(f"Error: {ex}")
             return False
         return True
+
     def get_images_left(self):
         return self.img_left
 
     def get_images_right(self):
         return self.img_right
-
 
     def cleanup(self):
         self.left_cam.DeInit()
