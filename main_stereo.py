@@ -35,8 +35,8 @@ class Main_Stereo:
         return self.phi_image_left, self.phi_image_right
 
     def calculate_qsi_images(self):
-        self.qsi_image_left = PhaseMap.calculate_qsi(self.images_left[:, :, 4:9])
-        self.qsi_image_right = PhaseMap.calculate_qsi(self.images_right[:, :, 4:9])
+        self.qsi_image_left = PhaseMap.calculate_qsi(self.images_left[:, :, 4:])
+        self.qsi_image_right = PhaseMap.calculate_qsi(self.images_right[:, :, 4:])
         return self.qsi_image_left, self.qsi_image_right
 
     def calculate_remaped_qsi_images(self):
@@ -55,17 +55,17 @@ class Main_Stereo:
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
         # Left Phi and Remaped QSI
-        ax1.plot(self.phi_image_left[1, :], color='gray')
+        ax1.plot(self.phi_image_left[600, :], color='gray')
         ax1.set_ylabel('Phi Image left', color='gray')
         ax1.tick_params(axis='y', labelcolor='gray')
 
         ax1_2 = ax1.twinx()
-        ax1_2.plot(self.remaped_qsi_image_left[1, :], color='red')
+        ax1_2.plot(self.remaped_qsi_image_left[600, :], color='red')
         ax1_2.set_ylabel('Remaped QSI Image left', color='red')
         ax1_2.tick_params(axis='y', labelcolor='red')
 
         # Left Abs Phi Image 1D
-        ax2.plot(abs_phi_image_left[1, :], color='gray')
+        ax2.plot(abs_phi_image_left[600, :], color='gray')
         ax2.set_title('Abs Phi Image left 1D')
         ax2.set_ylabel('Abs Phi Image left')
 
@@ -87,17 +87,17 @@ class Main_Stereo:
         # Right Phi and Remaped QSI
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
-        ax1.plot(self.phi_image_right[1, :], color='gray')
+        ax1.plot(self.phi_image_right[600, :], color='gray')
         ax1.set_ylabel('Phi Image right', color='gray')
         ax1.tick_params(axis='y', labelcolor='gray')
 
         ax1_2 = ax1.twinx()
-        ax1_2.plot(self.remaped_qsi_image_right[1, :], color='red')
+        ax1_2.plot(self.remaped_qsi_image_right[600, :], color='red')
         ax1_2.set_ylabel('Remaped QSI Image right', color='red')
         ax1_2.tick_params(axis='y', labelcolor='red')
 
         # Right Abs Phi Image 1D
-        ax2.plot(abs_phi_image_right[1, :], color='gray')
+        ax2.plot(abs_phi_image_right[600, :], color='gray')
         ax2.set_title('Abs Phi Image right 1D')
         ax2.set_ylabel('Abs Phi Image right')
 
@@ -141,7 +141,7 @@ def main():
     cv2.moveWindow('projector', move[0], move[1])
 
     fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=16, steps=4)
-    graycode = GrayCode.GrayCode(resolution=img_resolution, n_bits=4)
+    graycode = GrayCode.GrayCode(resolution=img_resolution, n_bits=5)
     fringe_images = fringe.get_image()
     graycode_images = graycode.get_images()
 
@@ -195,6 +195,34 @@ def main():
         stereo.calculate_qsi_images()
         stereo.calculate_remaped_qsi_images()
         stereo.create_phase_map()
+        # branco_maximo_left = np.max(images_left)
+        # branco_minimo_left = np.min(images_left)
+        # branco_maximo_right = np.max(images_right)
+        # branco_minimo_right = np.min(images_right)
+        # print("valor maximo left:", branco_maximo_left)
+        # print("valor minimo left:", branco_minimo_left)
+        # print("valor maximo right:", branco_maximo_right)
+        # print("valor minimo right:", branco_minimo_right)
+        valores_max_branco_left = []
+        valores_max_branco_right = []
+        for imagem in images_left[:, :, 4]:
+            branco_max_left = np.max(imagem)
+            valores_max_branco_left.append(branco_max_left)
+
+        media_branco_max_left = np.mean(valores_max_branco_left)
+        print("média dos brancos left:", media_branco_max_left)
+
+        for i, valor in enumerate(valores_max_branco_left):
+            print(f"O valor máximo de branco na imagem left {i + 1} é: {valor}")
+        for imagem in images_right[:, :, 4]:
+            branco_max_right = np.max(imagem)
+            valores_max_branco_right.append(branco_max_right)
+
+        media_branco_max_right = np.mean(valores_max_branco_right)
+        print("media dos brancos right:", media_branco_max_right)
+
+        for j, valor in enumerate(valores_max_branco_right):
+            print(f"O valor máximo de branco na imagem right{j  + 1} é: {valor}")
 
 
 if __name__ == '__main__':
