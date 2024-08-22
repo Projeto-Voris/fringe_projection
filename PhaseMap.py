@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from include import FringePattern, GrayCode
 
 def calculate_phi(image):
+
     height, width, channels = image.shape
     n = channels
 
@@ -29,7 +30,7 @@ def calculate_qsi(graycode_image):
     height, width, _ = graycode_image.shape
 
     # Converter os valores relevantes da imagem graycode para inteiros
-    bit_values = (graycode_image[:, :, 2:] / 255).astype(int)
+    bit_values = (graycode_image[:, :, 2:] / 225).astype(int)
 
     # Converter cada linha de bits em um único número inteiro
     qsi_image = np.dot(bit_values, 2 ** np.arange(bit_values.shape[-1])[::-1])
@@ -84,17 +85,17 @@ if __name__ == '__main__':
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
     # First subplot with dual y-axes
-    ax1.plot(phi_image[1, :], color='gray')
+    ax1.plot(phi_image[600, 500:1000], color='gray')
     ax1.set_ylabel('Phi Image', color='gray')
     ax1.tick_params(axis='y', labelcolor='gray')
 
     ax1_2 = ax1.twinx()
-    ax1_2.plot(remaped_qsi_image[1, :], color='red')
+    ax1_2.plot(remaped_qsi_image[600, :], color='red')
     ax1_2.set_ylabel('Remaped QSI Image', color='red')
     ax1_2.tick_params(axis='y', labelcolor='red')
 
     # Second subplot
-    ax2.plot(abs_phi_image[1, :], color='gray')
+    ax2.plot(abs_phi_image[600, :], color='gray')
     ax2.set_title('Abs Phi Image 1D')
     ax2.set_ylabel('Abs Phi Image')
 
