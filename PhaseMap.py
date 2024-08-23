@@ -57,7 +57,7 @@ if __name__ == '__main__':
     n_shift = 4
 
     # Inicializa imagens franja e graycode
-    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=n_franjas, steps=n_shift)
+    fringe = FringePattern.FringePattern(resolution=img_resolution, px_f=n_franjas, steps=n_shift)
     graycode = GrayCode.GrayCode(resolution=img_resolution, n_bits=4)
 
     # recebe em alguma variavem as imagens

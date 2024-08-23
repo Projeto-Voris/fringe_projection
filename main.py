@@ -30,9 +30,10 @@ def main():
 
     cv2.setWindowProperty('projector', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.moveWindow('projector', move[0], move[1])
-    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, f_sin=75, steps=4)
+    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, px_f=16, steps=4)
     fringe_images = stereo.get_fr_image()
     graycode_images = stereo.get_gc_images()
+    k = 0
 
     try:
         stereo_ctrl.set_exposure_time(16666.0)
@@ -46,7 +47,6 @@ def main():
             cv2.resizeWindow('Stereo', 1600, 600)
 
         count = 0
-        k = 0
         n_img = np.concatenate((fringe_images, graycode_images), axis=2)
         num_images = n_img.shape[2]
 
@@ -72,27 +72,27 @@ def main():
         stereo_ctrl.stop_acquisition()
         stereo_ctrl.cleanup()
         # stereo.normalize_b_w()
-
-        #     width, height, _ = self.images_left.shape
-        bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-        br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-        stereo.calculate_phi_images()
-        # white_left, white_right = stereo.normalize_white(bl, br)
-        # plt.imshow(bl, cmap='gray')
-        # plt.show()
-        # plt.imshow(br, cmap='gray')
-        # plt.show()
-        stereo.calculate_qsi_images(150, 150)
-        stereo.calculate_remaped_qsi_images()
-        stereo.create_phase_map()
-        # branco_maximo_left = np.max(images_left)
-        # branco_minimo_left = np.min(images_left)
-        # branco_maximo_right = np.max(images_right)
-        # branco_minimo_right = np.min(images_right)
-        # print("valor maximo left:", branco_maximo_left)
-        # print("valor minimo left:", branco_minimo_left)
-        # print("valor maximo right:", branco_maximo_right)
-        # print("valor minimo right:", branco_minimo_right)
+        if k != 27:
+            #     width, height, _ = self.images_left.shape
+            bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
+            br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
+            stereo.calculate_phi_images()
+            # white_left, white_right = stereo.normalize_white(bl, br)
+            # plt.imshow(bl, cmap='gray')
+            # plt.show()
+            # plt.imshow(br, cmap='gray')
+            # plt.show()
+            stereo.calculate_qsi_images(160, 160)
+            stereo.calculate_remaped_qsi_images()
+            stereo.create_phase_map()
+            # branco_maximo_left = np.max(images_left)
+            # branco_minimo_left = np.min(images_left)
+            # branco_maximo_right = np.max(images_right)
+            # branco_minimo_right = np.min(images_right)
+            # print("valor maximo left:", branco_maximo_left)
+            # print("valor minimo left:", branco_minimo_left)
+            # print("valor maximo right:", branco_maximo_right)
+            # print("valor minimo right:", branco_minimo_right)
 
 
 if __name__ == '__main__':

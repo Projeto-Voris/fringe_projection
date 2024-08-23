@@ -19,7 +19,7 @@ if __name__ == '__main__':
     cv2.setWindowProperty('projector', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)  # change window property
     cv2.moveWindow('projector', move[0], move[1])  # move projector window to projector display
 
-    fringe = FringePattern.FringePattern(resolution=img_resolution, f_sin=16, steps=4)  # create FringePattern class
+    fringe = FringePattern.FringePattern(resolution=img_resolution, px_f=16, steps=4)  # create FringePattern class
     graycode = GrayCode.GrayCode(resolution=img_resolution, n_bits=4)  # create GrayCode class
     fringe_images = fringe.get_image()  # get fringe images
     graycode_image = graycode.get_images()  # get graycode images

@@ -7,7 +7,7 @@ from include.GrayCode import GrayCode
 
 
 class Stereo_Fringe_Process(GrayCode, FringePattern):
-    def __init__(self, img_resolution=(1920, 1080), camera_resolution=(1600, 1200), f_sin=16, steps=4):
+    def __init__(self, img_resolution=(1920, 1080), camera_resolution=(1600, 1200), px_f=16, steps=4):
         self.remaped_qsi_image_left = []
         self.remaped_qsi_image_right = []
         self.qsi_image_left = []
@@ -15,11 +15,14 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         self.phi_image_left = []
         self.phi_image_right = []
         self.images_left = np.zeros(
-            (camera_resolution[1], camera_resolution[0], int(steps + self.min_bits_gc(f_sin) + 2)), np.uint8)
+            (camera_resolution[1], camera_resolution[0],
+             int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
         self.images_right = np.zeros(
-            (camera_resolution[1], camera_resolution[0], int(steps + self.min_bits_gc(f_sin) + 2)), np.uint8)
-        GrayCode.__init__(self, resolution=img_resolution, n_bits=self.min_bits_gc(f_sin))
-        FringePattern.__init__(self, resolution=img_resolution, f_sin=f_sin, steps=steps)
+            (camera_resolution[1], camera_resolution[0],
+             int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
+        GrayCode.__init__(self, resolution=img_resolution, n_bits=self.min_bits_gc(np.floor(img_resolution[0] / px_f)),
+                          px_f=px_f)
+        FringePattern.__init__(self, resolution=img_resolution, px_f=px_f, steps=steps)
 
     def min_bits_gc(self, x):
         if x <= 0:
@@ -31,22 +34,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
             power_of_2 *= 2
             n += 1
         return n + 1
-
-    # def normalize_white(self):
-    #     width, height, _ = self.images_left.shape
-    #     bl = cv2.threshold(self.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-    #     br = cv2.threshold(self.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-    #     images_left = cv2.bitwise_and(self.images_left[:,:,self.steps], self.images_left[:,:,self.steps], mask=bl)
-    #     images_right = cv2.bitwise_and(self.images_right[:,:,self.steps], self.images_right[:,:,self.steps], mask=br)
-    #     # stereo.set_images(images_left, images_right)
-    #     # Calculate the mean of the maximum values for the left images
-    #     # avg_white_left = np.mean(self.images_left[int(-50+width/2):int(50+width/2), int(-50+height/2):int(50+height/2), self.steps], axis=(0,1))
-    #     # avg_white_right = np.mean(self.images_right[int(-50+width/2):int(50+width/2), int(-50+height/2):int(50+height/2), self.steps], axis=(0,1))
-    #     avg_white_left = np.mean(images_left, axis=(0,1))
-    #     avg_white_right = np.mean(images_right, axis=(0,1))
-    #     # Calculate the mean of the maximum values for the right images
-    #     print("media dos brancos %f, %f:", avg_white_left, avg_white_right)
-    #     return avg_white_left, avg_white_right
 
     def normalize_white(self, mask_left, mask_right):
         # Assuming self.mask_left and self.mask_right are the masks for left and right images
@@ -86,8 +73,24 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         # return self.remaped_qsi_image_left, self.remaped_qsi_image_right
 
     def calculate_abs_phi_images(self):
-        abs_phi_image_left = self.phi_image_left + 2 * np.pi * self.remaped_qsi_image_left
+        # abs_phi_image_left = self.phi_image_left + 2 * np.pi * self.remaped_qsi_image_left
         abs_phi_image_right = self.phi_image_right + 2 * np.pi * self.remaped_qsi_image_right
+        abs_phi_image_left = np.zeros((self.images_left.shape[0], self.images_left.shape[1]), np.uint8)
+        # abs_phi_image_right = np.zeros((self.images_right.shape[0], self.images_right.shape[1]), np.uint8)
+        for i in range(self.images_left.shape[0]):
+            for j in range(self.images_left.shape[1]):
+                if self.phi_image_left[i, j] <= -np.pi / 2:
+                    abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
+                        (self.qsi_image_left[i, j] + 1) / 2) + np.pi
+
+                if -np.pi / 2 < self.phi_image_left[i, j] < np.pi / 2:
+                    abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
+                        self.qsi_image_left[i, j] / 2) + np.pi
+
+                if self.phi_image_left[i, j] >= np.pi / 2:
+                    abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * (
+                                np.floor((self.qsi_image_left[i, j] + 1) / 2) - 1) + np.pi
+
         return abs_phi_image_left, abs_phi_image_right
 
     def calculate_phi(self, image):
@@ -198,4 +201,12 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         # Title for the whole figure
         fig.suptitle('Fase e Fase absoluta right')
         plt.tight_layout()
+
+        plt.figure()
+        plt.imshow(self.remaped_qsi_image_left, cmap='gray')
+        plt.title('QSI Image left')
+        plt.figure()
+        plt.imshow(self.remaped_qsi_image_right, cmap='gray')
+        plt.title('QSI Image right')
+
         plt.show()
