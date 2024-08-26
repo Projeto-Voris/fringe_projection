@@ -7,7 +7,6 @@ import numpy as np
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
 
-
 def main():
     VISUALIZE = True
     cv2.namedWindow('projector', cv2.WINDOW_NORMAL)
@@ -15,9 +14,12 @@ def main():
     move = (0, 0)
     width, height = 1024, 1024
     img_resolution = (width, height)
+    pixel_per_fringe = 32
+    steps = 6
     # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
-    path = '/home/daniel/PycharmProjects/fringe_projection/images'
+    path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
+
 
     stereo_ctrl = StereoCameraController(left_serial=16378750, right_serial=16378734)
     print("Models: {}".format(stereo_ctrl.get_model()))
@@ -30,7 +32,7 @@ def main():
 
     cv2.setWindowProperty('projector', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.moveWindow('projector', move[0], move[1])
-    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, px_f=16, steps=4)
+    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, px_f=pixel_per_fringe, steps=steps)
     fringe_images = stereo.get_fr_image()
     graycode_images = stereo.get_gc_images()
     k = 0

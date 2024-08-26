@@ -7,13 +7,13 @@ from include.GrayCode import GrayCode
 
 
 class Stereo_Fringe_Process(GrayCode, FringePattern):
-    def __init__(self, img_resolution=(1920, 1080), camera_resolution=(1600, 1200), px_f=16, steps=4):
-        self.remaped_qsi_image_left = []
-        self.remaped_qsi_image_right = []
-        self.qsi_image_left = []
-        self.qsi_image_right = []
-        self.phi_image_left = []
-        self.phi_image_right = []
+    def __init__(self, img_resolution=(1024, 768), camera_resolution=(1600, 1200), px_f=16, steps=4):
+        self.remaped_qsi_image_left = np.zeros(img_resolution, np.uint8)
+        self.remaped_qsi_image_right = np.zeros(img_resolution, np.uint8)
+        self.qsi_image_left = np.zeros(img_resolution, np.uint8)
+        self.qsi_image_right = np.zeros(img_resolution, np.uint8)
+        self.phi_image_left = np.zeros(img_resolution, np.uint8)
+        self.phi_image_right = np.zeros(img_resolution, np.uint8)
         self.images_left = np.zeros(
             (camera_resolution[1], camera_resolution[0],
              int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
@@ -74,7 +74,8 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
     def calculate_abs_phi_images(self):
         # abs_phi_image_left = self.phi_image_left + 2 * np.pi * self.remaped_qsi_image_left
-        abs_phi_image_right = self.phi_image_right + 2 * np.pi * self.remaped_qsi_image_right
+        abs_phi_image_right = self.phi_image_right + 2 * np.pi * np.floor(self.remaped_qsi_image_right/2)
+        # abs_phi_image_right = np.unwrap(abs_phi_image_right)
         abs_phi_image_left = np.zeros((self.images_left.shape[0], self.images_left.shape[1]), np.uint8)
         # abs_phi_image_right = np.zeros((self.images_right.shape[0], self.images_right.shape[1]), np.uint8)
         for i in range(self.images_left.shape[0]):
@@ -83,11 +84,11 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                     abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
                         (self.qsi_image_left[i, j] + 1) / 2) + np.pi
 
-                if -np.pi / 2 < self.phi_image_left[i, j] < np.pi / 2:
+                elif -np.pi / 2 < self.phi_image_left[i, j] < np.pi / 2:
                     abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
                         self.qsi_image_left[i, j] / 2) + np.pi
 
-                if self.phi_image_left[i, j] >= np.pi / 2:
+                elif self.phi_image_left[i, j] >= np.pi / 2:
                     abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * (
                                 np.floor((self.qsi_image_left[i, j] + 1) / 2) - 1) + np.pi
 
@@ -151,46 +152,59 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         ax1_2.set_ylabel('Remaped QSI Image left', color='red')
         ax1_2.tick_params(axis='y', labelcolor='red')
 
-        # Left Abs Phi Image 1D
-        ax2.plot(abs_phi_image_left[int(self.images_left.shape[1] / 2), :], color='gray')
-        ax2.set_title('Abs Phi Image left 1D')
-        ax2.set_ylabel('Abs Phi Image left')
+        ax2.plot(self.phi_image_right[int(self.images_right.shape[1] / 2), :], color='gray')
+        ax2.set_ylabel('Phi Image right', color='gray')
+        ax3.tick_params(axis='y', labelcolor='gray')
+
+        ax2_2 = ax2.twinx()
+        ax2_2.plot(self.remaped_qsi_image_right[int(self.images_right.shape[1] / 2), :], color='red')
+        ax2_2.set_ylabel('Remaped QSI Image right', color='red')
+        ax2_2.tick_params(axis='y', labelcolor='red')
 
         # Left Phi Image 2D
         im3 = ax3.imshow(self.phi_image_left, cmap='gray')
         ax3.set_title('Phi Image left 2D')
         plt.colorbar(im3, ax=ax3)
 
-        # Left Abs Phi Image 2D
-        im4 = ax4.imshow(abs_phi_image_left, cmap='gray')
-        ax4.set_title('Abs Phi Image left 2D')
-        plt.colorbar(im4, ax=ax4)
+        # Right Phi Image 2D
+        im4 = ax4.imshow(self.phi_image_right, cmap='gray')
+        ax4.set_title('Phi Image Right 2D')
+        plt.colorbar(im3, ax=ax4)
+
+
 
         # Title for the whole figure
-        fig.suptitle('Fase e Fase absoluta left')
+        fig.suptitle('Fase franjas')
         plt.tight_layout()
         plt.show()
 
         # Right Phi and Remaped QSI
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
-        ax1.plot(self.phi_image_right[int(self.images_right.shape[1] / 2), :], color='gray')
-        ax1.set_ylabel('Phi Image right', color='gray')
-        ax1.tick_params(axis='y', labelcolor='gray')
+        # Left Abs Phi Image 1D
+        ax1.plot(abs_phi_image_left[int(self.images_left.shape[1] / 2), :], color='gray')
+        ax1.set_title('Abs Phi Image left 1D')
+        ax1.set_ylabel('Abs Phi Image left')
 
         ax1_2 = ax1.twinx()
-        ax1_2.plot(self.remaped_qsi_image_right[int(self.images_right.shape[1] / 2), :], color='red')
-        ax1_2.set_ylabel('Remaped QSI Image right', color='red')
+        ax1_2.plot(self.remaped_qsi_image_left[int(self.images_left.shape[1] / 2), :], color='red')
+        ax1_2.set_ylabel('Remaped QSI Image left', color='red')
         ax1_2.tick_params(axis='y', labelcolor='red')
-
+        ax1.grid(True)
         # Right Abs Phi Image 1D
         ax2.plot(abs_phi_image_right[int(self.images_right.shape[1] / 2), :], color='gray')
         ax2.set_title('Abs Phi Image right 1D')
         ax2.set_ylabel('Abs Phi Image right')
 
-        # Right Phi Image 2D
-        im3 = ax3.imshow(self.phi_image_right, cmap='gray')
-        ax3.set_title('Phi Image right 2D')
+        ax2_2 = ax2.twinx()
+        ax2_2.plot(self.remaped_qsi_image_right[int(self.images_right.shape[1] / 2), :], color='red')
+        ax2_2.set_ylabel('Remaped QSI Image right', color='red')
+        ax2_2.tick_params(axis='y', labelcolor='red')
+        ax2.grid(True)
+
+        # Left Abs Phi Image 2D
+        im3 = ax3.imshow(abs_phi_image_left, cmap='gray')
+        ax3.set_title('Abs Phi Image left 2D')
         plt.colorbar(im3, ax=ax3)
 
         # Right Abs Phi Image 2D
@@ -199,14 +213,36 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         plt.colorbar(im4, ax=ax4)
 
         # Title for the whole figure
-        fig.suptitle('Fase e Fase absoluta right')
+        fig.suptitle('Fase absoluta')
         plt.tight_layout()
 
-        plt.figure()
-        plt.imshow(self.remaped_qsi_image_left, cmap='gray')
-        plt.title('QSI Image left')
-        plt.figure()
-        plt.imshow(self.remaped_qsi_image_right, cmap='gray')
-        plt.title('QSI Image right')
 
+        # Qsi and remapped QSI
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
+
+        # Left Abs Phi Image 2D
+        im1 = ax1.imshow(self.qsi_image_left, cmap='gray')
+        ax1.set_title('Abs Phi Image left 2D')
+        plt.colorbar(im1, ax=ax1)
+
+        # Right Abs Phi Image 2D
+        im2 = ax2.imshow(self.qsi_image_right, cmap='gray')
+        ax2.set_title('Abs Phi Image left 2D')
+        plt.colorbar(im2, ax=ax2)
+
+
+
+        # Left Abs Phi Image 2D
+        im3 = ax3.imshow(self.remaped_qsi_image_left, cmap='gray')
+        ax3.set_title('Abs Phi Image left 2D')
+        plt.colorbar(im3, ax=ax3)
+
+        # Right Abs Phi Image 2D
+        im4 = ax4.imshow(self.remaped_qsi_image_right, cmap='gray')
+        ax4.set_title('Abs Phi Image right 2D')
+        plt.colorbar(im4, ax=ax4)
+
+        # Title for the whole figure
+        fig.suptitle('Qsi & Remaped QSI')
+        plt.tight_layout()
         plt.show()
