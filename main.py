@@ -14,7 +14,7 @@ def main():
     move = (0, 0)
     width, height = 1024, 1024
     img_resolution = (width, height)
-    pixel_per_fringe = 32
+    pixel_per_fringe = 256
     steps = 6
     # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
     path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
@@ -84,7 +84,7 @@ def main():
             # plt.show()
             # plt.imshow(br, cmap='gray')
             # plt.show()
-            stereo.calculate_qsi_images(160, 160)
+            stereo.calculate_qsi_images(200, 200)
             stereo.calculate_remaped_qsi_images()
             stereo.create_phase_map()
             # branco_maximo_left = np.max(images_left)

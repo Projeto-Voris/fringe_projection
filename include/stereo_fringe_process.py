@@ -14,6 +14,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         self.qsi_image_right = np.zeros(img_resolution, np.uint8)
         self.phi_image_left = np.zeros(img_resolution, np.uint8)
         self.phi_image_right = np.zeros(img_resolution, np.uint8)
+
         self.images_left = np.zeros(
             (camera_resolution[1], camera_resolution[0],
              int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
@@ -73,47 +74,53 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         # return self.remaped_qsi_image_left, self.remaped_qsi_image_right
 
     def calculate_abs_phi_images(self):
-        # abs_phi_image_left = self.phi_image_left + 2 * np.pi * self.remaped_qsi_image_left
-        abs_phi_image_right = self.phi_image_right + 2 * np.pi * np.floor(self.remaped_qsi_image_right/2)
+        abs_phi_image_left = np.zeros((self.images_left.shape[0], self.images_left.shape[1]), np.float32)
+        abs_phi_image_right = np.zeros((self.images_right.shape[0], self.images_right.shape[1]), np.float32)
+        # self.abs_phi_image_left = self.phi_image_left + 2 * np.pi * np.ceil(self.remaped_qsi_image_left / 2)
+        # self.abs_phi_image_right = self.phi_image_right + 2 * np.pi * np.ceil(self.remaped_qsi_image_right / 2)
+
         # abs_phi_image_right = np.unwrap(abs_phi_image_right)
-        abs_phi_image_left = np.zeros((self.images_left.shape[0], self.images_left.shape[1]), np.uint8)
-        # abs_phi_image_right = np.zeros((self.images_right.shape[0], self.images_right.shape[1]), np.uint8)
+
         for i in range(self.images_left.shape[0]):
             for j in range(self.images_left.shape[1]):
                 if self.phi_image_left[i, j] <= -np.pi / 2:
                     abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
-                        (self.qsi_image_left[i, j] + 1) / 2) + np.pi
+                        (self.remaped_qsi_image_left[i, j] + 1) / 2) + np.pi
 
-                elif -np.pi / 2 < self.phi_image_left[i, j] < np.pi / 2:
+                if -np.pi / 2 < self.phi_image_left[i, j] < np.pi / 2:
                     abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
-                        self.qsi_image_left[i, j] / 2) + np.pi
+                        self.remaped_qsi_image_left[i, j] / 2) + np.pi
 
-                elif self.phi_image_left[i, j] >= np.pi / 2:
+                if self.phi_image_left[i, j] >= np.pi / 2:
                     abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * (
-                                np.floor((self.qsi_image_left[i, j] + 1) / 2) - 1) + np.pi
+                            np.floor((self.remaped_qsi_image_left[i, j] + 1) / 2) - 1) + np.pi
+                if self.phi_image_right[i, j] <= -np.pi / 2:
+                    abs_phi_image_right[i, j] = self.phi_image_right[i, j] + 2 * np.pi * np.floor(
+                        (self.remaped_qsi_image_right[i, j] + 1) / 2) + np.pi
+
+                if -np.pi / 2 < self.phi_image_right[i, j] < np.pi / 2:
+                    abs_phi_image_right[i, j] = self.phi_image_right[i, j] + 2 * np.pi * np.floor(
+                        self.remaped_qsi_image_right[i, j] / 2) + np.pi
+
+                if self.phi_image_right[i, j] >= np.pi / 2:
+                    abs_phi_image_right[i, j] = self.phi_image_right[i, j] + 2 * np.pi * (
+                            np.floor((self.remaped_qsi_image_right[i, j] + 1) / 2) - 1) + np.pi
 
         return abs_phi_image_left, abs_phi_image_right
 
     def calculate_phi(self, image):
 
-        height, width, channels = image.shape
-        n = channels
-
         # Calcular os valores de seno e cosseno para todos os canais de uma vez
-        indices = np.arange(1, n + 1)
-        sin_values = np.sin(2 * np.pi * indices / n)
-        cos_values = np.cos(2 * np.pi * indices / n)
+        indices = np.arange(1, image.shape[2]+1)
+        sin_values = np.sin(2 * np.pi * indices / (image.shape[2]))
+        cos_values = np.cos(2 * np.pi * indices / (image.shape[2]))
 
         # Multiplicar a imagem pelos valores de seno e cosseno
         sin_contributions = image * sin_values
         cos_contributions = image * cos_values
 
-        # Somar as contribuições ao longo dos canais
-        sum_sin = np.sum(sin_contributions, axis=2)
-        sum_cos = np.sum(cos_contributions, axis=2)
-
         # Calcular Phi para cada pixel
-        phi_image = np.arctan2(-sum_sin, sum_cos)
+        phi_image = np.arctan2(-np.sum(sin_contributions, axis=2), np.sum(cos_contributions, axis=2))
 
         return phi_image
 
@@ -137,8 +144,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
         return remapped_qsi_image
 
-    def create_phase_map(self):
-        abs_phi_image_left, abs_phi_image_right = self.calculate_abs_phi_images()
+    def plot_phase_map(self, name='Plot'):
 
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
@@ -171,14 +177,17 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         ax4.set_title('Phi Image Right 2D')
         plt.colorbar(im3, ax=ax4)
 
-
-
         # Title for the whole figure
-        fig.suptitle('Fase franjas')
+        fig.suptitle('Fase franjas - {}'.format(name))
         plt.tight_layout()
+        # plt.savefig('phi_images.png', dpi=300, bbox_inches='tight')
+
         plt.show()
 
+    def plot_abs_phase_map(self, name='Plot'):
         # Right Phi and Remaped QSI
+        abs_phi_image_left, abs_phi_image_right = self.calculate_abs_phi_images()
+
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
         # Left Abs Phi Image 1D
@@ -213,36 +222,38 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         plt.colorbar(im4, ax=ax4)
 
         # Title for the whole figure
-        fig.suptitle('Fase absoluta')
+        fig.suptitle('Fase absoluta {}'.format(name))
+
         plt.tight_layout()
-
-
+        # plt.savefig('abs_phi_images.png', dpi=300, bbox_inches='tight')
+        plt.show()
+    def plot_qsi_map(self, name='Plot'):
         # Qsi and remapped QSI
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
 
         # Left Abs Phi Image 2D
         im1 = ax1.imshow(self.qsi_image_left, cmap='gray')
-        ax1.set_title('Abs Phi Image left 2D')
+        ax1.set_title('Qsi Image left 2D')
         plt.colorbar(im1, ax=ax1)
 
         # Right Abs Phi Image 2D
         im2 = ax2.imshow(self.qsi_image_right, cmap='gray')
-        ax2.set_title('Abs Phi Image left 2D')
+        ax2.set_title('Qsi Image right 2D')
         plt.colorbar(im2, ax=ax2)
-
-
 
         # Left Abs Phi Image 2D
         im3 = ax3.imshow(self.remaped_qsi_image_left, cmap='gray')
-        ax3.set_title('Abs Phi Image left 2D')
+        ax3.set_title('Remaped Qsi Image left 2D')
         plt.colorbar(im3, ax=ax3)
 
         # Right Abs Phi Image 2D
         im4 = ax4.imshow(self.remaped_qsi_image_right, cmap='gray')
-        ax4.set_title('Abs Phi Image right 2D')
+        ax4.set_title('Remped Qsi Image right 2D')
         plt.colorbar(im4, ax=ax4)
 
         # Title for the whole figure
-        fig.suptitle('Qsi & Remaped QSI')
+        fig.suptitle('Qsi & Remaped QSI {}'.format(name))
         plt.tight_layout()
+        # plt.savefig('qsi_images.png', dpi=300, bbox_inches='tight')
+
         plt.show()
