@@ -15,7 +15,7 @@ def main():
     width, height = 1024, 1024
     img_resolution = (width, height)
     pixel_per_fringe = 256
-    steps = 6
+    steps = 4
     # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
     path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
@@ -79,22 +79,17 @@ def main():
             bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
             br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
             stereo.calculate_phi_images()
-            # white_left, white_right = stereo.normalize_white(bl, br)
-            # plt.imshow(bl, cmap='gray')
-            # plt.show()
-            # plt.imshow(br, cmap='gray')
-            # plt.show()
-            stereo.calculate_qsi_images(200, 200)
+            white_left, white_right = stereo.normalize_white(bl, br)
+            plt.imshow(bl, cmap='gray')
+            plt.show()
+            plt.imshow(br, cmap='gray')
+            plt.show()
+            stereo.calculate_qsi_images(190, 190)
             stereo.calculate_remaped_qsi_images()
-            stereo.create_phase_map()
-            # branco_maximo_left = np.max(images_left)
-            # branco_minimo_left = np.min(images_left)
-            # branco_maximo_right = np.max(images_right)
-            # branco_minimo_right = np.min(images_right)
-            # print("valor maximo left:", branco_maximo_left)
-            # print("valor minimo left:", branco_minimo_left)
-            # print("valor maximo right:", branco_maximo_right)
-            # print("valor minimo right:", branco_minimo_right)
+            stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            stereo.plot_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+
 
 
 if __name__ == '__main__':

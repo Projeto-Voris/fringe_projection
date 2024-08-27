@@ -31,7 +31,7 @@ class FringePattern:
         x = np.arange(self.fr_images.shape[1])
         for n in range(self.steps): # phase shift of n=4
             phase_shift = n * 2 * np.pi/self.steps
-            y = np.sin(np.pi/2 + 2 * np.pi * float(self.n_fringes) * x / self.fr_images.shape[1] + phase_shift) + 1
+            y = np.sin(2 * np.pi * float(self.n_fringes) * x / self.fr_images.shape[1] + phase_shift) + 1
             self.sin_values.append(y)
         for k in range(len(self.sin_values)):
             for i in range(self.fr_images.shape[0]):
