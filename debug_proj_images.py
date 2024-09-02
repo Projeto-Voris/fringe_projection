@@ -1,12 +1,6 @@
 import os
 import cv2
-import matplotlib.pyplot as plt
-import screeninfo
-import PySpin
-import numpy as np
 from include.stereo_fringe_process import Stereo_Fringe_Process
-from include.StereoCameraController import StereoCameraController
-from include.FringePattern import FringePattern
 
 
 def main():
@@ -44,7 +38,7 @@ def main():
     # cv2.imshow('phi stereo', phi_stereo)
     # cv2.waitKey(0)
 
-    stereo.calculate_qsi_images(170, 170)
+    stereo.calculate_qsi_images()
     stereo.calculate_remaped_qsi_images()
     stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
     stereo.plot_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
