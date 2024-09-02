@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 import cv2
 # Import classes
 from include.FringePattern import FringePattern
@@ -8,6 +9,12 @@ from include.GrayCode import GrayCode
 
 class Stereo_Fringe_Process(GrayCode, FringePattern):
     def __init__(self, img_resolution=(1024, 768), camera_resolution=(1600, 1200), px_f=16, steps=4):
+        """
+            Inicializa uma instância da classe com parâmetros específicos de resolução e configuração.
+
+            Este método inicializa as variáveis necessárias para o processamento de imagens, incluindo
+            imagens remapeadas e de fase para a esquerda e direita, bem como imagens capturadas pela câmera.
+        """
         self.remaped_qsi_image_left = np.zeros(img_resolution, np.uint8)
         self.remaped_qsi_image_right = np.zeros(img_resolution, np.uint8)
         self.qsi_image_left = np.zeros(img_resolution, np.uint8)
@@ -26,54 +33,110 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         FringePattern.__init__(self, resolution=img_resolution, px_f=px_f, steps=steps)
 
     def min_bits_gc(self, x):
+        """
+            Calcula o número mínimo de bits necessários para representar um número em código Gray.
+
+            Parameters:
+            -----------
+            x : int
+                Número positivo para o qual se deseja calcular o número mínimo de bits necessários.
+
+            Returns:
+            --------
+            int
+                Número mínimo de bits necessários para representar o número `x` em código Gray.
+        """
         if x <= 0:
             raise ValueError("Input must be a positive integer.")
-        n = 0
-        power_of_2 = 1
-        # Keep doubling the power_of_2 until it exceeds x
-        while power_of_2 < x:
-            power_of_2 *= 2
-            n += 1
-        return n + 1
+        return math.ceil(math.log2(x + 1))
 
     def normalize_white(self, mask_left, mask_right):
+        """
+            Calcula a média dos valores máximos dos pixels brancos nas imagens esquerda e direita usando máscaras.
+
+            Parameters:
+            -----------
+            mask_left : numpy.ndarray
+                Máscara binária aplicada à imagem esquerda, onde os pixels de interesse são marcados com o valor 255.
+
+            mask_right : numpy.ndarray
+                Máscara binária aplicada à imagem direita, onde os pixels de interesse são marcados com o valor 255.
+
+            Returns:
+            --------
+            media_branco_max_left : float
+                Média dos valores máximos dos pixels brancos na imagem esquerda, calculada a partir da máscara.
+
+            media_branco_max_right : float
+                Média dos valores máximos dos pixels brancos na imagem direita, calculada a partir da máscara.
+        """
         # Assuming self.mask_left and self.mask_right are the masks for left and right images
         # They should have the same dimensions as the respective images
 
-        # Apply mask to the left images and calculate the mean of max values
-        masked_left_images = self.images_left[:, :, self.steps] * (mask_left == 255)
-        media_branco_max_left = np.mean(masked_left_images[mask_left == 255])
-
-        # Apply mask to the right images and calculate the mean of max values
-        masked_right_images = self.images_right[:, :, self.steps] * (mask_right == 255)
-        media_branco_max_right = np.mean(masked_right_images[mask_right == 255])
+        media_branco_max_left = np.mean(self.images_left[:, :, self.steps][mask_left == 255])
+        media_branco_max_right = np.mean(self.images_right[:, :, self.steps][mask_right == 255])
 
         print("media dos brancos right:", media_branco_max_right)
 
         return media_branco_max_left, media_branco_max_right
 
     def set_images(self, image_left, image_right, counter):
+        """
+            Atribui imagens para os índices especificados nas matrizes de imagens esquerda e direita.
+        """
         self.images_left[:, :, counter] = image_left
         self.images_right[:, :, counter] = image_right
 
     def calculate_phi_images(self):
+        """
+            Calcula as imagens de fase (Phi) para as imagens esquerda e direita.
+        """
         self.phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))])
         self.phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))])
         # return self.phi_image_left, self.phi_image_right
 
-    def calculate_qsi_images(self, w_left, w_right):
-        self.qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):],
-                                                 white_value=w_left)
-        self.qsi_image_right = self.calculate_qsi(self.images_right[:, :, FringePattern.get_steps(self):],
-                                                  white_value=w_right)
+    def calculate_qsi_images(self):
+        """
+            Calcula as imagens QSI (Quantitative Phase Shift Imaging) para as imagens esquerda e direita.
+        """
+        self.qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):])
+        self.qsi_image_right = self.calculate_qsi(self.images_right[:, :, FringePattern.get_steps(self):])
         # return qsi_image_left, qsi_image_right
 
     def calculate_remaped_qsi_images(self):
+        """
+            Calcula as imagens QSI remapeadas para as imagens esquerda e direita.
+        """
         self.remaped_qsi_image_left = self.remap_qsi_image(self.qsi_image_left, GrayCode.get_gc_order_v(self))
         self.remaped_qsi_image_right = self.remap_qsi_image(self.qsi_image_right, GrayCode.get_gc_order_v(self))
         # return self.remaped_qsi_image_left, self.remaped_qsi_image_right
 
     def calculate_abs_phi_images(self):
+        """
+            Calcula as imagens de fase absoluta (phi) para os conjuntos de imagens esquerda e direita.
+
+            Esta função gera as imagens de fase absoluta `abs_phi_image_left` e `abs_phi_image_right` a partir das imagens
+            de fase `phi_image_left` e `phi_image_right`, bem como das imagens de QSI remapeadas correspondentes. As imagens
+            de fase absoluta são calculadas considerando as diferentes condições de fase em relação a -π/2 e π/2, aplicando
+            correções baseadas nos valores remapeados de QSI.
+
+            O método é utilizado para garantir que as fases calculadas estejam em um intervalo contínuo e coerente para
+            processamento subsequente, como na análise de padrões de fase ou reconstrução 3D.
+
+            Parameters:
+            -----------
+            Não possui parâmetros de entrada.
+
+            Returns:
+            --------
+            abs_phi_image_left : np.ndarray
+                Uma matriz NumPy bidimensional representando a imagem de fase absoluta correspondente à imagem
+                `phi_image_left`. Os valores da fase estão em radianos.
+
+            abs_phi_image_right : np.ndarray
+                Uma matriz NumPy bidimensional representando a imagem de fase absoluta correspondente à imagem
+                `phi_image_right`. Os valores da fase estão em radianos.
+            """
         abs_phi_image_left = np.zeros((self.images_left.shape[0], self.images_left.shape[1]), np.float32)
         abs_phi_image_right = np.zeros((self.images_right.shape[0], self.images_right.shape[1]), np.float32)
         # self.abs_phi_image_left = self.phi_image_left + 2 * np.pi * np.ceil(self.remaped_qsi_image_left / 2)
@@ -81,54 +144,107 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
         # abs_phi_image_right = np.unwrap(abs_phi_image_right)
 
-        for i in range(self.images_left.shape[0]):
-            for j in range(self.images_left.shape[1]):
-                if self.phi_image_left[i, j] <= -np.pi / 2:
-                    abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
-                        (self.remaped_qsi_image_left[i, j] + 1) / 2) + np.pi
+        # Condição para a imagem esquerda
+        mask_left1 = self.phi_image_left <= -np.pi / 2
+        mask_left2 = (self.phi_image_left > -np.pi / 2) & (self.phi_image_left < np.pi / 2)
+        mask_left3 = self.phi_image_left >= np.pi / 2
 
-                if -np.pi / 2 < self.phi_image_left[i, j] < np.pi / 2:
-                    abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * np.floor(
-                        self.remaped_qsi_image_left[i, j] / 2) + np.pi
+        abs_phi_image_left = np.zeros_like(self.phi_image_left)
 
-                if self.phi_image_left[i, j] >= np.pi / 2:
-                    abs_phi_image_left[i, j] = self.phi_image_left[i, j] + 2 * np.pi * (
-                            np.floor((self.remaped_qsi_image_left[i, j] + 1) / 2) - 1) + np.pi
-                if self.phi_image_right[i, j] <= -np.pi / 2:
-                    abs_phi_image_right[i, j] = self.phi_image_right[i, j] + 2 * np.pi * np.floor(
-                        (self.remaped_qsi_image_right[i, j] + 1) / 2) + np.pi
+        abs_phi_image_left[mask_left1] = self.phi_image_left[mask_left1] + 2 * np.pi * np.floor(
+            (self.remaped_qsi_image_left[mask_left1] + 1) / 2) + np.pi
 
-                if -np.pi / 2 < self.phi_image_right[i, j] < np.pi / 2:
-                    abs_phi_image_right[i, j] = self.phi_image_right[i, j] + 2 * np.pi * np.floor(
-                        self.remaped_qsi_image_right[i, j] / 2) + np.pi
+        abs_phi_image_left[mask_left2] = self.phi_image_left[mask_left2] + 2 * np.pi * np.floor(
+            self.remaped_qsi_image_left[mask_left2] / 2) + np.pi
 
-                if self.phi_image_right[i, j] >= np.pi / 2:
-                    abs_phi_image_right[i, j] = self.phi_image_right[i, j] + 2 * np.pi * (
-                            np.floor((self.remaped_qsi_image_right[i, j] + 1) / 2) - 1) + np.pi
+        abs_phi_image_left[mask_left3] = self.phi_image_left[mask_left3] + 2 * np.pi * (
+                np.floor((self.remaped_qsi_image_left[mask_left3] + 1) / 2) - 1) + np.pi
+
+        # Condição para a imagem direita
+        mask_right1 = self.phi_image_right <= -np.pi / 2
+        mask_right2 = (self.phi_image_right > -np.pi / 2) & (self.phi_image_right < np.pi / 2)
+        mask_right3 = self.phi_image_right >= np.pi / 2
+
+        abs_phi_image_right = np.zeros_like(self.phi_image_right)
+
+        abs_phi_image_right[mask_right1] = self.phi_image_right[mask_right1] + 2 * np.pi * np.floor(
+            (self.remaped_qsi_image_right[mask_right1] + 1) / 2) + np.pi
+
+        abs_phi_image_right[mask_right2] = self.phi_image_right[mask_right2] + 2 * np.pi * np.floor(
+            self.remaped_qsi_image_right[mask_right2] / 2) + np.pi
+
+        abs_phi_image_right[mask_right3] = self.phi_image_right[mask_right3] + 2 * np.pi * (
+                np.floor((self.remaped_qsi_image_right[mask_right3] + 1) / 2) - 1) + np.pi
 
         return abs_phi_image_left, abs_phi_image_right
 
     def calculate_phi(self, image):
+        """
+            Calcula a imagem de fase (phi) a partir de uma imagem de múltiplos canais utilizando transformações senoidais e cossenoidais.
 
+            Esta função processa uma imagem composta por múltiplos canais (por exemplo, imagens obtidas através de projeções de padrões de fase)
+            e calcula a fase correspondente para cada pixel. O cálculo é realizado aplicando funções seno e cosseno aos canais da imagem
+            e combinando esses valores para obter a fase através da função arctan2.
+
+            Parameters:
+            -----------
+            image : np.ndarray
+                Uma matriz NumPy tridimensional (altura, largura, canais), onde cada canal representa uma amostra
+                de fase em diferentes momentos ou ângulos. A função espera que os canais sejam organizados em uma
+                sequência de fases.
+
+            Returns:
+            --------
+            phi_image : np.ndarray
+                Uma matriz NumPy bidimensional representando a imagem Phi. Cada valor de pixel na imagem corresponde
+                ao ângulo Phi calculado para aquele pixel com base nas contribuições de seno e cosseno dos canais.
+            """
         # Calcular os valores de seno e cosseno para todos os canais de uma vez
         indices = np.arange(1, image.shape[2]+1)
-        sin_values = np.sin(2 * np.pi * indices / (image.shape[2]))
-        cos_values = np.cos(2 * np.pi * indices / (image.shape[2]))
+        angle = 2 * np.pi * indices / image.shape[2]
+
+        sin_values = np.sin(angle)
+        cos_values = np.cos(angle)
 
         # Multiplicar a imagem pelos valores de seno e cosseno
-        sin_contributions = image * sin_values
-        cos_contributions = image * cos_values
+        sin_contributions = np.sum(image * sin_values, axis=2)
+        cos_contributions = np.sum(image * cos_values, axis=2)
 
         # Calcular Phi para cada pixel
-        phi_image = np.arctan2(-np.sum(sin_contributions, axis=2), np.sum(cos_contributions, axis=2))
+        phi_image = np.arctan2(-sin_contributions, cos_contributions)
 
         return phi_image
 
-    def calculate_qsi(self, graycode_image, white_value):
-        height, width, _ = graycode_image.shape
+    def calculate_qsi(self, graycode_image):
+        """
+            Calcula a imagem QSI (Quantitative Structure Image) a partir de uma imagem codificada em graycode.
 
-        # Converter os valores relevantes da imagem graycode para inteiros
-        bit_values = (graycode_image[:, :, 2:] / white_value).astype(int)
+            A função converte uma imagem de código gray em uma imagem QSI. A imagem de entrada deve ter várias camadas,
+            onde a primeira camada é a referência de branco e as camadas subsequentes contêm os bits do código gray.
+            A função normaliza os valores de bits com relação à camada de referência de branco e, em seguida, converte
+            cada conjunto de bits em um único número inteiro, gerando a imagem QSI.
+
+            Parameters:
+            -----------
+            graycode_image : np.ndarray
+                Uma matriz NumPy de três dimensões (altura, largura, camadas) representando a imagem de código gray.
+                A primeira camada(0) contém os valores de referência de branco, enquanto as camadas subsequentes contêm
+                os bits do código gray.
+
+            Returns:
+            --------
+            qsi_image : np.ndarray
+                Uma matriz NumPy bidimensional representando a imagem QSI calculada. Cada pixel na imagem QSI corresponde
+                a um valor inteiro derivado dos bits de código gray.
+            """
+
+        # Obter o valor de branco para cada pixel (shape (X, Y))
+        white_value = graycode_image[:, :, 0].astype(float)
+        white_value = np.maximum(white_value, 1e-6)
+
+        # Comparar os bits relevantes com o branco correspondente
+        bit_values = graycode_image[:, :, 2:] / white_value[:, :, None]
+        bit_values = (bit_values > 0.6).astype(int)
 
         # Converter cada linha de bits em um único número inteiro
         qsi_image = np.dot(bit_values, 2 ** np.arange(bit_values.shape[-1])[::-1])
@@ -136,124 +252,141 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         return qsi_image
 
     def remap_qsi_image(self, qsi_image, real_qsi_order):
+        """
+        Remapeia os valores de uma imagem QSI de acordo com uma nova ordem QSI real.
+
+        Esta função remapeia os valores da imagem QSI fornecida, utilizando uma ordem QSI real específica.
+        O mapeamento é realizado criando um dicionário que associa os valores originais aos novos índices,
+        de acordo com a ordem fornecida.
+
+        Parameters:
+        -----------
+        qsi_image : np.ndarray
+            Uma matriz NumPy bidimensional representando a imagem QSI original cujos valores precisam ser remapeados.
+
+        real_qsi_order : list
+            Uma lista de inteiros representando a ordem real dos valores QSI. Cada valor nesta lista corresponde
+            a um valor original da imagem QSI, e a posição desse valor na lista determina o novo índice a ser
+            aplicado.
+
+        Returns:
+        --------
+        remapped_qsi_image : np.ndarray
+            Uma matriz NumPy bidimensional com os valores remapeados de acordo com a nova ordem QSI.
+            O resultado mantém a mesma forma da `qsi_image` original, mas com os valores ajustados conforme
+            a nova ordem especificada.
+        """
         # Cria um mapeamento dos valores originais para os novos índices
         value_to_new_index_map = {value: new_index for new_index, value in enumerate(real_qsi_order)}
 
         # Mapeia os valores da qsi_image usando numpy para operações vetorizadas
-        remapped_qsi_image = np.vectorize(value_to_new_index_map.get)(qsi_image)
+        remapped_qsi_image = np.vectorize(lambda x: value_to_new_index_map.get(x, 0))(qsi_image)
 
         return remapped_qsi_image
 
+    def plot_1d_phase(self, ax, phi_image, remaped_qsi_image, title, ylabel):
+        """
+            Esta função cria dois gráficos sobrepostos no mesmo eixo. O primeiro gráfico mostra a imagem de
+            fase (`phi_image`) e o segundo gráfico mostra a imagem QSI remapeada (`remaped_qsi_image`). O gráfico
+            da imagem QSI remapeada é plotado em um eixo y secundário para permitir uma visualização clara das
+            duas séries de dados com diferentes escalas.
+        """
+        ax.plot(phi_image, color='gray')
+        ax.set_ylabel(ylabel, color='gray')
+        ax.tick_params(axis='y', labelcolor='gray')
+        ax.set_title(title)
+        ax.grid(True)
+
+        ax2 = ax.twinx()
+        ax2.plot(remaped_qsi_image, color='red')
+        ax2.set_ylabel('Remaped QSI Image', color='red')
+        ax2.tick_params(axis='y', labelcolor='red')
+
+    def plot_2d_image(self, ax, image, title, cmap='gray'):
+        """
+            Esta função exibe uma imagem 2D em um eixo específico, com a opção de definir o título e o mapa de
+            cores (colormap). Também adiciona uma barra de cores ao lado da imagem para indicar a escala dos valores.
+        """
+        im = ax.imshow(image, cmap=cmap)
+        ax.set_title(title)
+        plt.colorbar(im, ax=ax)
+
     def plot_phase_map(self, name='Plot'):
+        """
+            Plota gráficos 1D e 2D das imagens de fase e QSI remapeadas.
 
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
+            Esta função cria uma figura com uma grade 2x2 de subplots. Os gráficos incluem:
+            - Gráficos 1D da fase e da imagem QSI remapeada para as imagens esquerda e direita,
+              exibidos nos dois primeiros subplots.
+            - Imagens 2D da fase para as imagens esquerda e direita, exibidas nos dois últimos subplots.
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+        middle_index_left = int(self.images_left.shape[1] / 2)
+        middle_index_right = int(self.images_right.shape[1] / 2)
 
-        # Left Phi and Remaped QSI
-        ax1.plot(self.phi_image_left[int(self.images_left.shape[1] / 2), :], color='gray')
-        ax1.set_ylabel('Phi Image left', color='gray')
-        ax1.tick_params(axis='y', labelcolor='gray')
+        self.plot_1d_phase(axes[0, 0], self.phi_image_left[middle_index_left, :],
+                           self.remaped_qsi_image_left[middle_index_left, :], 'Phi Image left', 'Phi Image left')
 
-        ax1_2 = ax1.twinx()
-        ax1_2.plot(self.remaped_qsi_image_left[int(self.images_left.shape[1] / 2), :], color='red')
-        ax1_2.set_ylabel('Remaped QSI Image left', color='red')
-        ax1_2.tick_params(axis='y', labelcolor='red')
+        self.plot_1d_phase(axes[0, 1], self.phi_image_right[middle_index_right, :],
+                           self.remaped_qsi_image_right[middle_index_right, :], 'Phi Image right', 'Phi Image right')
 
-        ax2.plot(self.phi_image_right[int(self.images_right.shape[1] / 2), :], color='gray')
-        ax2.set_ylabel('Phi Image right', color='gray')
-        ax3.tick_params(axis='y', labelcolor='gray')
+        self.plot_2d_image(axes[1, 0], self.phi_image_left, 'Phi Image left 2D')
+        self.plot_2d_image(axes[1, 1], self.phi_image_right, 'Phi Image right 2D')
 
-        ax2_2 = ax2.twinx()
-        ax2_2.plot(self.remaped_qsi_image_right[int(self.images_right.shape[1] / 2), :], color='red')
-        ax2_2.set_ylabel('Remaped QSI Image right', color='red')
-        ax2_2.tick_params(axis='y', labelcolor='red')
-
-        # Left Phi Image 2D
-        im3 = ax3.imshow(self.phi_image_left, cmap='gray')
-        ax3.set_title('Phi Image left 2D')
-        plt.colorbar(im3, ax=ax3)
-
-        # Right Phi Image 2D
-        im4 = ax4.imshow(self.phi_image_right, cmap='gray')
-        ax4.set_title('Phi Image Right 2D')
-        plt.colorbar(im3, ax=ax4)
-
-        # Title for the whole figure
         fig.suptitle('Fase franjas - {}'.format(name))
         plt.tight_layout()
-        # plt.savefig('phi_images.png', dpi=300, bbox_inches='tight')
-
         plt.show()
 
     def plot_abs_phase_map(self, name='Plot'):
-        # Right Phi and Remaped QSI
+        """
+            Plota gráficos 1D e 2D das imagens de fase absoluta e QSI remapeada.
+
+            Esta função cria uma figura com uma grade 2x2 de subplots para visualizar as imagens de fase
+            absoluta e QSI remapeada. Os gráficos incluem:
+            - Gráficos 1D das imagens de fase absoluta (`abs_phi_image_left` e `abs_phi_image_right`) e
+              das imagens QSI remapeadas (`remaped_qsi_image_left` e `remaped_qsi_image_right`),
+              exibidos nos dois primeiros subplots.
+            - Imagens 2D das fases absolutas para as imagens esquerda e direita, exibidas nos dois últimos
+              subplots.
+        """
         abs_phi_image_left, abs_phi_image_right = self.calculate_abs_phi_images()
+        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
+        middle_index_left = int(self.images_left.shape[1] / 2)
+        middle_index_right = int(self.images_right.shape[1] / 2)
 
-        # Left Abs Phi Image 1D
-        ax1.plot(abs_phi_image_left[int(self.images_left.shape[1] / 2), :], color='gray')
-        ax1.set_title('Abs Phi Image left 1D')
-        ax1.set_ylabel('Abs Phi Image left')
+        self.plot_1d_phase(axes[0, 0], abs_phi_image_left[middle_index_left, :],
+                           self.remaped_qsi_image_left[middle_index_left, :], 'Abs Phi Image left 1D', 'Abs Phi Image left')
 
-        ax1_2 = ax1.twinx()
-        ax1_2.plot(self.remaped_qsi_image_left[int(self.images_left.shape[1] / 2), :], color='red')
-        ax1_2.set_ylabel('Remaped QSI Image left', color='red')
-        ax1_2.tick_params(axis='y', labelcolor='red')
-        ax1.grid(True)
-        # Right Abs Phi Image 1D
-        ax2.plot(abs_phi_image_right[int(self.images_right.shape[1] / 2), :], color='gray')
-        ax2.set_title('Abs Phi Image right 1D')
-        ax2.set_ylabel('Abs Phi Image right')
+        self.plot_1d_phase(axes[0, 1], abs_phi_image_right[middle_index_right, :],
+                           self.remaped_qsi_image_right[middle_index_right, :], 'Abs Phi Image right 1D', 'Abs Phi Image right')
 
-        ax2_2 = ax2.twinx()
-        ax2_2.plot(self.remaped_qsi_image_right[int(self.images_right.shape[1] / 2), :], color='red')
-        ax2_2.set_ylabel('Remaped QSI Image right', color='red')
-        ax2_2.tick_params(axis='y', labelcolor='red')
-        ax2.grid(True)
+        self.plot_2d_image(axes[1, 0], abs_phi_image_left, 'Abs Phi Image left 2D')
+        self.plot_2d_image(axes[1, 1], abs_phi_image_right, 'Abs Phi Image right 2D')
 
-        # Left Abs Phi Image 2D
-        im3 = ax3.imshow(abs_phi_image_left, cmap='gray')
-        ax3.set_title('Abs Phi Image left 2D')
-        plt.colorbar(im3, ax=ax3)
-
-        # Right Abs Phi Image 2D
-        im4 = ax4.imshow(abs_phi_image_right, cmap='gray')
-        ax4.set_title('Abs Phi Image right 2D')
-        plt.colorbar(im4, ax=ax4)
-
-        # Title for the whole figure
         fig.suptitle('Fase absoluta {}'.format(name))
 
         plt.tight_layout()
         # plt.savefig('abs_phi_images.png', dpi=300, bbox_inches='tight')
         plt.show()
+
     def plot_qsi_map(self, name='Plot'):
-        # Qsi and remapped QSI
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 8))
+        """
+            Plota gráficos 2D das imagens QSI e QSI remapeada.
 
-        # Left Abs Phi Image 2D
-        im1 = ax1.imshow(self.qsi_image_left, cmap='gray')
-        ax1.set_title('Qsi Image left 2D')
-        plt.colorbar(im1, ax=ax1)
+            Esta função cria uma figura com uma grade 2x2 de subplots para visualizar as imagens QSI
+            e QSI remapeada. Os gráficos incluem:
+            - Imagens 2D da QSI para as imagens esquerda e direita, exibidas nos dois primeiros subplots.
+            - Imagens 2D da QSI remapeada para as imagens esquerda e direita, exibidas nos dois últimos
+              subplots.
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
-        # Right Abs Phi Image 2D
-        im2 = ax2.imshow(self.qsi_image_right, cmap='gray')
-        ax2.set_title('Qsi Image right 2D')
-        plt.colorbar(im2, ax=ax2)
+        self.plot_2d_image(axes[0, 0], self.qsi_image_left, 'Qsi Image left 2D')
+        self.plot_2d_image(axes[0, 1], self.qsi_image_right, 'Qsi Image right 2D')
+        self.plot_2d_image(axes[1, 0], self.remaped_qsi_image_left, 'Remaped Qsi Image left 2D')
+        self.plot_2d_image(axes[1, 1], self.remaped_qsi_image_right, 'Remaped Qsi Image right 2D')
 
-        # Left Abs Phi Image 2D
-        im3 = ax3.imshow(self.remaped_qsi_image_left, cmap='gray')
-        ax3.set_title('Remaped Qsi Image left 2D')
-        plt.colorbar(im3, ax=ax3)
-
-        # Right Abs Phi Image 2D
-        im4 = ax4.imshow(self.remaped_qsi_image_right, cmap='gray')
-        ax4.set_title('Remped Qsi Image right 2D')
-        plt.colorbar(im4, ax=ax4)
-
-        # Title for the whole figure
         fig.suptitle('Qsi & Remaped QSI {}'.format(name))
         plt.tight_layout()
-        # plt.savefig('qsi_images.png', dpi=300, bbox_inches='tight')
-
         plt.show()
