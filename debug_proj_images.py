@@ -6,7 +6,7 @@ from include.stereo_fringe_process import Stereo_Fringe_Process
 def main():
     pixel_per_fringe = 256
     steps = 6
-    path = '/home/daniel/Insync/daniel.regner@labmetro.ufsc.br/Google Drive - Shared drives/VORIS  - Equipe/Sistema de Medição 4 - Stereo Projeção Franjas/Imagens/2024-08-27/pixel_per_fringe_{}_{}'.format(pixel_per_fringe,
+    path = '/home/tiagogiovenardi/Downloads/pixel_per_fringe_256_6-20240829T190213Z-001/pixel_per_fringe_256_6'.format(pixel_per_fringe,
                                                                                                  steps)
     # fringe = FringePattern(px_f=pixel_per_fringe, steps=steps)
 
