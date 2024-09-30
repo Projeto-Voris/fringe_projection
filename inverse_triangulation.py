@@ -68,7 +68,7 @@ def main():
 
     a_im_l, k_l, rot_m_l, tran_l, a_im_r, k_r, rot_m_r, tran_r = Distortion_correction.load_camera_params(image_path, mat_file)
 
-    xy_points = Distortion_correction.points3d(x_lim=(-10, 10), y_lim=(-10, 10), z_lim=(-10, 10), xy_step=5, z_step=0.1, visualize=False)
+    xy_points = Distortion_correction.points3d(x_lim=(0, 200), y_lim=(0, 200), z_lim=(-200, 200), xy_step=10, z_step=0.01, visualize=False)
     uv_points_L = Distortion_correction.gcs_f_ccs(xy_points, a_im_l, k_l, rot_m_l, tran_l)
     uv_points_R = Distortion_correction.gcs_f_ccs(xy_points, a_im_r, k_r, rot_m_r, tran_r)
 
@@ -82,8 +82,8 @@ def main():
     # Encontra os pontos válidos
     ho, hmax, hmin, imax, imin, ho_zstep = find_valid_points(xy_points, phase_diff)
 
-    filtered_3d_ho = xy_points[np.asarray(imax), np.int32]
-    filtered_3d_ho_min = xy_points[np.asarray(imin), np.int32]
+    filtered_3d_ho = xy_points[np.asarray(imax, np.int32)]
+    filtered_3d_ho_min = xy_points[np.asarray(imin, np.int32)]
 
     plot_point_cloud(filtered_3d_ho)
     plot_point_cloud(filtered_3d_ho_min)
