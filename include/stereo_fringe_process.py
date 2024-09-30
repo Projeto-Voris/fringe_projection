@@ -362,7 +362,17 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                            self.remaped_qsi_image_right[middle_index_right, :], 'Abs Phi Image right 1D', 'Abs Phi Image right')
 
         self.plot_2d_image(axes[1, 0], abs_phi_image_left, 'Abs Phi Image left 2D')
+        # min_value = np.min(abs_phi_image_left)
+        # max_value = np.max(abs_phi_image_left)
+        # image_remaped = 255 * (abs_phi_image_left - min_value) / (max_value - min_value)
+        # image_remaped = image_remaped.astype(np.uint8)
+        # cv2.imwrite('abs_phi_image_left.png', image_remaped)
         self.plot_2d_image(axes[1, 1], abs_phi_image_right, 'Abs Phi Image right 2D')
+        # min_value_r = np.min(abs_phi_image_right)
+        # max_value_r = np.max(abs_phi_image_right)
+        # image_remaped_r = 255 * (abs_phi_image_right - min_value_r) / (max_value_r - min_value_r)
+        # image_remaped_r = image_remaped_r.astype(np.uint8)
+        # cv2.imwrite('abs_phi_image_right.png', image_remaped_r)
 
         fig.suptitle('Fase absoluta {}'.format(name))
 
