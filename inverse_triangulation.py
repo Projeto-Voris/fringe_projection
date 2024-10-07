@@ -19,7 +19,7 @@ def calculate_phase_difference(intensity_left, intensity_right):
     return DifFase
 
 
-def find_valid_points(xy_points, phase_difference, threshold=300):
+def find_valid_points(xy_points, phase_difference):
     z_size = np.unique(xy_points[:, 2]).shape[0]
     # Encontra o Z de menor diferença de fase e filtra os pontos válidos
     # Fmin = np.min(phase_difference, axis=0)
@@ -62,13 +62,13 @@ def main():
     image_path = 'C:/Users/bianca.rosa/Documents/params_for_project_points'
     os.chdir(image_path)
 
-    phasemap_l = Distortion_correction.read_image(image_path, 'abs_phi_image_left.png')
-    phasemap_r = Distortion_correction.read_image(image_path, 'abs_phi_image_right.png')
-    mat_file = 'Params.mat'
+    phasemap_l = Distortion_correction.read_image(image_path, 'abs_phi_image_left_8.png')
+    phasemap_r = Distortion_correction.read_image(image_path, 'abs_phi_image_right_8.png')
+    mat_file = 'Params_sm4.mat'
 
     a_im_l, k_l, rot_m_l, tran_l, a_im_r, k_r, rot_m_r, tran_r = Distortion_correction.load_camera_params(image_path, mat_file)
 
-    xy_points = Distortion_correction.points3d(x_lim=(0, 200), y_lim=(0, 200), z_lim=(-200, 200), xy_step=10, z_step=0.01, visualize=False)
+    xy_points = Distortion_correction.points3d(x_lim=(0, 200), y_lim=(0, 200), z_lim=(-200, 200), xy_step=5, z_step=0.01, visualize=False)
     uv_points_L = Distortion_correction.gcs_f_ccs(xy_points, a_im_l, k_l, rot_m_l, tran_l)
     uv_points_R = Distortion_correction.gcs_f_ccs(xy_points, a_im_r, k_r, rot_m_r, tran_r)
 
