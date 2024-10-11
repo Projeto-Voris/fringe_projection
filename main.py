@@ -14,7 +14,7 @@ def main():
     move = (0, 0)
     width, height = 1024, 1024
     img_resolution = (width, height)
-    pixel_per_fringe = 256
+    pixel_per_fringe = 128
     steps = 4
     # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
     path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
@@ -26,7 +26,7 @@ def main():
     print("Serial: {}".format(stereo_ctrl.get_serial_numbers()))
 
     for m in screeninfo.get_monitors():
-        if m.name == 'DP-5':
+        if m.name == 'DP-3':
             move = (m.x, m.y)
             img_resolution = (m.width, m.height)
 
@@ -84,7 +84,7 @@ def main():
             plt.show()
             plt.imshow(br, cmap='gray')
             plt.show()
-            stereo.calculate_qsi_images(190, 190)
+            stereo.calculate_qsi_images()
             stereo.calculate_remaped_qsi_images()
             stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
             stereo.plot_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))

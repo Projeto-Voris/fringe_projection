@@ -28,9 +28,9 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         self.images_right = np.zeros(
             (camera_resolution[1], camera_resolution[0],
              int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
+        FringePattern.__init__(self, resolution=img_resolution, px_f=px_f, steps=steps)
         GrayCode.__init__(self, resolution=img_resolution, n_bits=self.min_bits_gc(np.floor(img_resolution[0] / px_f)),
                           px_f=px_f)
-        FringePattern.__init__(self, resolution=img_resolution, px_f=px_f, steps=steps)
 
     def min_bits_gc(self, x):
         """
@@ -48,7 +48,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         """
         if x <= 0:
             raise ValueError("Input must be a positive integer.")
-        return math.ceil(math.log2(x + 1))
+        return math.ceil(math.log2(x)+1)
 
     def normalize_white(self, mask_left, mask_right):
         """
