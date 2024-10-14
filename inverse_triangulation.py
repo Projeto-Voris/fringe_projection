@@ -5,10 +5,10 @@ import cupy as cp
 import gc
 import os
 import cv2
+
 class inverse_triangulation():
-    def __init__(self, params, points_3d):
-        self.params = params
-        self.points_3d = points_3d
+    def __init__(self):
+        pass
 
     def points3d(self, x_lim, y_lim, z_lim, xy_step, z_step, visualize=True):
         x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
@@ -179,7 +179,7 @@ class inverse_triangulation():
         phi_map = []
         phi_min = []
         phi_min_id = []
-        for k in range(self.points_3d.shape[0] // z_step):
+        for k in range(points_3d.shape[0] // z_step):
             diff_phi = np.abs(left_Igray[z_step * k:(k + 1) * z_step] - right_Igray[z_step * k:(k + 1) * z_step])
             phi_map.append(diff_phi)
             phi_min.append(np.nanmin(diff_phi))
@@ -281,8 +281,8 @@ class inverse_triangulation():
         Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr, R, T = self.load_camera_params(yaml_file=yaml_file)
 
         # Project points on Left and right
-        uv_points_L = self.gcs2ccs(self.points_3d, Kl, Dl, Rl, Tl)
-        uv_points_R = self.gcs2ccs(self.points_3d, Kr, Dr, Rr, Tr)
+        uv_points_L = self.gcs2ccs(points_3d, Kl, Dl, Rl, Tl)
+        uv_points_R = self.gcs2ccs(points_3d, Kr, Dr, Rr, Tr)
 
         # Interpolate reprojected points to image bounds (return pixel intensity)
         inter_points_L, std_interp_L = self.bi_interpolation_gpu(left_images, uv_points_L)
@@ -290,7 +290,7 @@ class inverse_triangulation():
 
         phi_map, phi_min, phi_min_id = self.phase_map(inter_points_L, inter_points_R, points_3d)
 
-        filtered_3d_phi = self.points_3d[np.asarray(phi_min_id, np.int32)]
+        filtered_3d_phi = points_3d[np.asarray(phi_min_id, np.int32)]
 
         if DEBUG:
             self.plot_zscan_phi(phi_map=phi_map)
@@ -305,11 +305,3 @@ class inverse_triangulation():
 
         self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
                                       title="Point Cloud of min phase diff")
-
-    def main(self):
-        yaml_file = self.params['yaml_file']
-
-        self.points_3d = self.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7,
-                                            z_step=0.1, visualize=False)
-
-        self.fringe_zscan(points_3d=self.points_3d, yaml_file=yaml_file, DEBUG=False, SAVE=True)
