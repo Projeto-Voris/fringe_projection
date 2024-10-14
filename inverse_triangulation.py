@@ -6,11 +6,23 @@ import gc
 import os
 import cv2
 class inverse_triangulation():
-    def __init__(self, images, params, points_3d, uv_points):
+    def __init__(self, params, points_3d):
         self.params = params
         self.points_3d = points_3d
-        self.images = images
-        self.uv_points = uv_points
+
+    def points3d(self, x_lim, y_lim, z_lim, xy_step, z_step, visualize=True):
+        x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
+        y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
+        z_lin = np.arange(z_lim[0], z_lim[1], z_step)
+
+        mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
+
+        c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
+
+        if visualize:
+            self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
+
+        return c_points
 
     def plot_3d_points(self, x, y, z, color=None, title='Plot 3D of max correlation points'):
         """
@@ -41,9 +53,9 @@ class inverse_triangulation():
         ax.set_aspect('equal', adjustable='box')
         plt.show()
 
-    def load_camera_params(self):
+    def load_camera_params(self, yaml_file):
         # Load the YAML file
-        with open(self.params) as file:  # Replace with your file path
+        with open(yaml_file) as file:  # Replace with your file path
             params = yaml.safe_load(file)
 
             # Parse the matrices
@@ -73,7 +85,7 @@ class inverse_triangulation():
         array = np.loadtxt(filename, delimiter=',')
         return array
 
-    def bi_interpolation_gpu(self, max_memory_gb=3):
+    def bi_interpolation_gpu(self, images, uv_points, max_memory_gb=3):
         """
         Perform bilinear interpolation on a stack of images at specified uv_points on the GPU,
         ensuring that each batch uses no more than the specified memory limit.
@@ -87,8 +99,8 @@ class inverse_triangulation():
         interpolated: (N, num_images) array of interpolated pixel values, or (N,) for a single image.
         std: Standard deviation of the corner pixels used for interpolation.
         """
-        images = cp.asarray(self.images)
-        uv_points = cp.asarray(self.uv_points)
+        images = cp.asarray(images)
+        uv_points = cp.asarray(uv_points)
 
         if len(images.shape) == 2:
             images = images[:, :, cp.newaxis]
@@ -162,10 +174,8 @@ class inverse_triangulation():
 
         return interpolated_cpu, std_cpu
 
-    def phase_map(self):
-        left_Igray = self.bi_interpolation_gpu()
-        right_Igray = self.bi_interpolation_gpu()
-        z_step = np.unique(self.points_3d[:, 2]).shape[0]
+    def phase_map(self, left_Igray, right_Igray, points_3d):
+        z_step = np.unique(points_3d[:, 2]).shape[0]
         phi_map = []
         phi_min = []
         phi_min_id = []
@@ -255,42 +265,12 @@ class inverse_triangulation():
         cv2.imshow(name, combined_image)
         cv2.waitKey(0)
 
-    def plot_3d_points(self, x, y, z, color=None, title='Plot 3D of max correlation points'):
-        """
-        Plot 3D points as scatter points where color is based on Z value
-        Parameters:
-            x: array of x positions
-            y: array of y positions
-            z: array of z positions
-            color: Vector of point intensity grayscale
-        """
-        if color is None:
-            color = z
-        cmap = 'viridis'
-        # Plot the 3D scatter plot
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
-        ax.title.set_text(title)
-
-        scatter = ax.scatter(x, y, z, c=color, cmap=cmap, marker='o')
-        # ax.set_zlim(0, np.max(z))
-        colorbar = plt.colorbar(scatter, ax=ax, shrink=0.5, aspect=5)
-        colorbar.set_label('Z Value Gradient')
-
-        # Add labels
-        ax.set_xlabel('X [mm]')
-        ax.set_ylabel('Y [mm]')
-        ax.set_zlabel('Z [mm]')
-        ax.set_aspect('equal', adjustable='box')
-        plt.show()
-
-    def fringe_zscan(self, DEBUG=False, SAVE=True):
+    def fringe_zscan(self, points_3d, yaml_file, DEBUG=False, SAVE=True):
 
         left_images = []
         right_images = []
 
-        for abs_image_left_32, abs_image_right_32 in zip(sorted(os.listdir('csv/left')),
-                                                         sorted(os.listdir('csv/right'))):
+        for abs_image_left_32, abs_image_right_32 in zip(sorted(os.listdir('csv/left')), sorted(os.listdir('csv/right'))):
             left_images.append(self.load_array_from_csv(os.path.join('csv/left', abs_image_left_32)))
             right_images.append(self.load_array_from_csv(os.path.join('csv/right', abs_image_right_32)))
 
@@ -298,17 +278,17 @@ class inverse_triangulation():
         right_images = np.stack(right_images, axis=-1).astype(np.float32)
 
         # Read file containing all calibration parameters from stereo system
-        Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr, R, T = self.load_camera_params()
+        Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr, R, T = self.load_camera_params(yaml_file=yaml_file)
 
         # Project points on Left and right
         uv_points_L = self.gcs2ccs(self.points_3d, Kl, Dl, Rl, Tl)
         uv_points_R = self.gcs2ccs(self.points_3d, Kr, Dr, Rr, Tr)
 
         # Interpolate reprojected points to image bounds (return pixel intensity)
-        inter_points_L, std_interp_L = self.bi_interpolation_gpu()
-        inter_points_R, std_interp_R = self.bi_interpolation_gpu()
+        inter_points_L, std_interp_L = self.bi_interpolation_gpu(left_images, uv_points_L)
+        inter_points_R, std_interp_R = self.bi_interpolation_gpu(right_images, uv_points_R)
 
-        phi_map, phi_min, phi_min_id = self.phase_map()
+        phi_map, phi_min, phi_min_id = self.phase_map(inter_points_L, inter_points_R, points_3d)
 
         filtered_3d_phi = self.points_3d[np.asarray(phi_min_id, np.int32)]
 
@@ -325,3 +305,11 @@ class inverse_triangulation():
 
         self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
                                       title="Point Cloud of min phase diff")
+
+    def main(self):
+        yaml_file = self.params['yaml_file']
+
+        self.points_3d = self.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7,
+                                            z_step=0.1, visualize=False)
+
+        self.fringe_zscan(points_3d=self.points_3d, yaml_file=yaml_file, DEBUG=False, SAVE=True)

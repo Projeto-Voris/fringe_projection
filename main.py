@@ -6,6 +6,9 @@ import PySpin
 import numpy as np
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
+import inverse_triangulation
+import fringe_process
+import Distortion_correction
 
 def main():
     VISUALIZE = True
@@ -74,6 +77,7 @@ def main():
         stereo_ctrl.stop_acquisition()
         stereo_ctrl.cleanup()
         # stereo.normalize_b_w()
+
         if k != 27:
             #     width, height, _ = self.images_left.shape
             bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
@@ -89,7 +93,12 @@ def main():
             stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
             stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
 
+        yaml_file = 'C:/Users/bianca.rosa/PycharmProjects/fringe_projection/Params/SM4_20241004_bianca.yaml'
 
+        points_3d = fringe_process.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7,
+                                            z_step=0.1, visualize=False)
+        zscan = inverse_triangulation.inverse_triangulation(params=yaml_file, points_3d=points_3d)
+        zscan.main()
 
 if __name__ == '__main__':
     main()
