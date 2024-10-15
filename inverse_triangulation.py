@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
-import cupy as cp
-import gc
 import os
 import cv2
 
@@ -85,94 +83,73 @@ class inverse_triangulation():
         array = np.loadtxt(filename, delimiter=',')
         return array
 
-    def bi_interpolation_gpu(self, images, uv_points, max_memory_gb=3):
+    def bi_interpolation(self, images, uv_points, batch_size=10000):
         """
-        Perform bilinear interpolation on a stack of images at specified uv_points on the GPU,
-        ensuring that each batch uses no more than the specified memory limit.
+        Perform bilinear interpolation on a stack of images at specified uv_points, optimized for memory.
 
         Parameters:
         images: (height, width, num_images) array of images, or (height, width) for a single image.
         uv_points: (2, N) array of points where N is the number of points.
-        max_memory_gb: Maximum memory to use on the GPU per batch in gigabytes (default 6GB).
+        batch_size: Maximum number of points to process at once (default 10,000 for memory efficiency).
 
         Returns:
         interpolated: (N, num_images) array of interpolated pixel values, or (N,) for a single image.
         std: Standard deviation of the corner pixels used for interpolation.
         """
-        images = cp.asarray(images)
-        uv_points = cp.asarray(uv_points)
-
         if len(images.shape) == 2:
-            images = images[:, :, cp.newaxis]
+            # Convert 2D image to 3D for consistent processing
+            images = images[:, :, np.newaxis]
 
         height, width, num_images = images.shape
         N = uv_points.shape[1]
 
-        # Calculate max bytes we can use
-        max_bytes = max_memory_gb * 1024 ** 3
-
-        def estimate_memory_for_batch(batch_size):
-            bytes_per_float32 = 8
-            memory_for_images = height * width * bytes_per_float32  # Only one image at a time
-            memory_for_uv = batch_size * 2 * bytes_per_float32
-            intermediate_memory = 4 * batch_size * bytes_per_float32  # For p11, p12, etc.
-            return memory_for_images + memory_for_uv + intermediate_memory
-
-        batch_size = N
-        while estimate_memory_for_batch(batch_size) > max_bytes:
-            batch_size //= 2
-
-        # print(f"Batch size adjusted to: {batch_size} to fit within {max_memory_gb}GB GPU memory limit.")
-
-        # Initialize output arrays on CPU to accumulate results
-        interpolated_cpu = np.zeros((N, num_images), dtype=np.float32)
-        std_cpu = np.zeros((N, num_images), dtype=np.float32)
+        # Initialize the output arrays
+        interpolated = np.zeros((N, num_images))
+        std = np.zeros(N)
 
         # Process points in batches
         for i in range(0, N, batch_size):
             end = min(i + batch_size, N)
             uv_batch = uv_points[:, i:end]
 
-            x = uv_batch[0].astype(cp.int32)
-            y = uv_batch[1].astype(cp.int32)
+            x = uv_batch[0].astype(float)
+            y = uv_batch[1].astype(float)
 
-            x1 = cp.clip(cp.floor(x).astype(cp.int32), 0, width - 1)
-            y1 = cp.clip(cp.floor(y).astype(cp.int32), 0, height - 1)
-            x2 = cp.clip(x1 + 1, 0, width - 1)
-            y2 = cp.clip(y1 + 1, 0, height - 1)
+            # Ensure x and y are within bounds
+            x1 = np.clip(np.floor(x).astype(int), 0, width - 1)
+            y1 = np.clip(np.floor(y).astype(int), 0, height - 1)
+            x2 = np.clip(x1 + 1, 0, width - 1)
+            y2 = np.clip(y1 + 1, 0, height - 1)
 
+            # Calculate the differences
             x_diff = x - x1
             y_diff = y - y1
 
-            for n in range(num_images):  # Process one image at a time
-                p11 = images[y1, x1, n]
-                p12 = images[y2, x1, n]
-                p21 = images[y1, x2, n]
-                p22 = images[y2, x2, n]
+            # Bilinear interpolation in batches (vectorized)
+            for n in range(num_images):
+                p11 = images[y1, x1, n]  # Top-left corner
+                p12 = images[y2, x1, n]  # Bottom-left corner
+                p21 = images[y1, x2, n]  # Top-right corner
+                p22 = images[y2, x2, n]  # Bottom-right corner
 
+                # Bilinear interpolation formula (for each batch)
                 interpolated_batch = (
                         p11 * (1 - x_diff) * (1 - y_diff) +
                         p21 * x_diff * (1 - y_diff) +
                         p12 * (1 - x_diff) * y_diff +
                         p22 * x_diff * y_diff
                 )
+                interpolated[i:end, n] = interpolated_batch
 
-                std_batch = cp.std(cp.vstack([p11, p12, p21, p22]), axis=0)
+                # # Compute standard deviation across the four corners for each point
+                # std_batch = np.std(np.vstack([p11, p12, p21, p22]), axis=0)
+                # std[i:end] = std_batch
 
-                interpolated_cpu[i:end, n] = cp.asnumpy(interpolated_batch)
-                std_cpu[i:end, n] = cp.asnumpy(std_batch)
-
-            del p11, p12, p21, p22, std_batch, interpolated_batch
-            # Free memory after each batch
-        # del x1, x2, y1, y2, x2, y2
-        cp.get_default_memory_pool().free_all_blocks()
-        gc.collect()
-
+        # Return 1D interpolated result if the input was a 2D image
         if images.shape[2] == 1:
-            interpolated_cpu = interpolated_cpu[:, 0]
-            std_cpu = std_cpu[:, 0]
-
-        return interpolated_cpu, std_cpu
+            interpolated = interpolated[:, 0]
+        std = np.zeros_like((uv_points.shape[0], images.shape[2]))
+        return interpolated, std
 
     def phase_map(self, left_Igray, right_Igray, points_3d):
         z_step = np.unique(points_3d[:, 2]).shape[0]
@@ -285,8 +262,8 @@ class inverse_triangulation():
         uv_points_R = self.gcs2ccs(points_3d, Kr, Dr, Rr, Tr)
 
         # Interpolate reprojected points to image bounds (return pixel intensity)
-        inter_points_L, std_interp_L = self.bi_interpolation_gpu(left_images, uv_points_L)
-        inter_points_R, std_interp_R = self.bi_interpolation_gpu(right_images, uv_points_R)
+        inter_points_L, std_interp_L = self.bi_interpolation(left_images, uv_points_L)
+        inter_points_R, std_interp_R = self.bi_interpolation(right_images, uv_points_R)
 
         phi_map, phi_min, phi_min_id = self.phase_map(inter_points_L, inter_points_R, points_3d)
 

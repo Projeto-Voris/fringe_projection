@@ -93,12 +93,13 @@ def main():
             stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
             stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
 
+        zscan = inverse_triangulation.inverse_triangulation()
         yaml_file = 'C:/Users/bianca.rosa/PycharmProjects/fringe_projection/Params/SM4_20241004_bianca.yaml'
 
         points_3d = fringe_process.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7,
                                             z_step=0.1, visualize=False)
-        zscan = inverse_triangulation.inverse_triangulation(params=yaml_file, points_3d=points_3d)
-        zscan.main()
+        zscan.fringe_zscan(yaml_file=yaml_file, points_3d=points_3d)
+
 
 if __name__ == '__main__':
     main()
