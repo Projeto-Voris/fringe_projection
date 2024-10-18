@@ -173,7 +173,15 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         abs_phi_image_right[mask_right3] = self.phi_image_right[mask_right3] + 2 * np.pi * (
                 np.floor((self.remaped_qsi_image_right[mask_right3] + 1) / 2) - 1) + np.pi
 
-        return abs_phi_image_left, abs_phi_image_right
+        min_value = np.min(abs_phi_image_left)
+        max_value = np.max(abs_phi_image_left)
+        abs_phi_image_left_remaped = 255 * (abs_phi_image_left - min_value) / (max_value - min_value)
+
+        min_value_r = np.min(abs_phi_image_right)
+        max_value_r = np.max(abs_phi_image_right)
+        abs_phi_image_right_remaped = 255 * (abs_phi_image_right - min_value_r) / (max_value_r - min_value_r)
+
+        return abs_phi_image_left_remaped, abs_phi_image_right_remaped
 
     def apply_mask_otsu_threshold(self, image):
         """
@@ -282,6 +290,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         # Comparar os bits relevantes com o branco correspondente
         bit_values = graycode_image[:, :, 2:] / white_value[:, :, None]
         bit_values = (bit_values > 0.8).astype(int)
+        # bit_values = (bit_values > 0.5).astype(int)
 
         # Converter cada linha de bits em um único número inteiro
         qsi_image = np.dot(bit_values, 2 ** np.arange(bit_values.shape[-1])[::-1])
@@ -411,8 +420,8 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         abs_phi_image_left, abs_phi_image_right = self.calculate_abs_phi_images()
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
-        self.save_array_to_csv(abs_phi_image_left, filename='abs_image_left_32.csv')
-        self.save_array_to_csv(abs_phi_image_right, filename='abs_image_right_32.csv')
+        # self.save_array_to_csv(abs_phi_image_left, filename='abs_image_left_32_20241016.csv')
+        # self.save_array_to_csv(abs_phi_image_right, filename='abs_image_right_32_20241016.csv')
 
         middle_index_left = int(self.images_left.shape[1] / 2)
         middle_index_right = int(self.images_right.shape[1] / 2)
@@ -424,17 +433,17 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                            self.remaped_qsi_image_right[middle_index_right, :], 'Abs Phi Image right 1D', 'Abs Phi Image right')
 
         self.plot_2d_image(axes[1, 0], abs_phi_image_left, 'Abs Phi Image left 2D')
-        min_value = np.min(abs_phi_image_left)
-        max_value = np.max(abs_phi_image_left)
-        image_remaped = 255 * (abs_phi_image_left - min_value) / (max_value - min_value)
-        image_remaped = image_remaped.astype(np.uint8)
-        cv2.imwrite('abs_phi_image_left_12.png', image_remaped)
+        # min_value = np.min(abs_phi_image_left)
+        # max_value = np.max(abs_phi_image_left)
+        # image_remaped = 255 * (abs_phi_image_left - min_value) / (max_value - min_value)
+        # image_remaped = image_remaped.astype(np.uint8)
+        # cv2.imwrite('abs_phi_image_left_14.png', image_remaped)
         self.plot_2d_image(axes[1, 1], abs_phi_image_right, 'Abs Phi Image right 2D')
-        min_value_r = np.min(abs_phi_image_right)
-        max_value_r = np.max(abs_phi_image_right)
-        image_remaped_r = 255 * (abs_phi_image_right - min_value_r) / (max_value_r - min_value_r)
-        image_remaped_r = image_remaped_r.astype(np.uint8)
-        cv2.imwrite('abs_phi_image_right_12.png', image_remaped_r)
+        # min_value_r = np.min(abs_phi_image_right)
+        # max_value_r = np.max(abs_phi_image_right)
+        # image_remaped_r = 255 * (abs_phi_image_right - min_value_r) / (max_value_r - min_value_r)
+        # image_remaped_r = image_remaped_r.astype(np.uint8)
+        # cv2.imwrite('abs_phi_image_right_14.png', image_remaped_r)
 
         fig.suptitle('Fase absoluta {}'.format(name))
 
