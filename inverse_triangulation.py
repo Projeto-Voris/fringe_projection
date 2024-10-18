@@ -67,10 +67,10 @@ class inverse_triangulation():
         Rr = np.array(params['rot_matrix_right'], dtype=np.float64)
         Tr = np.array(params['t_right'], dtype=np.float64)
 
-        R = np.array(params['R'], dtype=np.float64)
-        T = np.array(params['T'], dtype=np.float64)
+        # R = np.array(params['R'], dtype=np.float64)
+        # T = np.array(params['T'], dtype=np.float64)
 
-        return Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr, R, T
+        return Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr
 
     def load_array_from_csv(self, filename):
         """
@@ -140,10 +140,6 @@ class inverse_triangulation():
                         p22 * x_diff * y_diff
                 )
                 interpolated[i:end, n] = interpolated_batch
-
-                # # Compute standard deviation across the four corners for each point
-                # std_batch = np.std(np.vstack([p11, p12, p21, p22]), axis=0)
-                # std[i:end] = std_batch
 
         # Return 1D interpolated result if the input was a 2D image
         if images.shape[2] == 1:
@@ -242,20 +238,42 @@ class inverse_triangulation():
         cv2.imshow(name, combined_image)
         cv2.waitKey(0)
 
-    def fringe_zscan(self, points_3d, yaml_file, DEBUG=False, SAVE=True):
+    def fringe_masks(self, img_l, img_r, uv_l, uv_r, std_l, std_r, phi_id, min_thresh=0, max_thresh=1):
+        valid_u_l = (uv_l[0, :] >= 0) & (uv_l[0, :] < img_l.shape[1])
+        valid_v_l = (uv_l[1, :] >= 0) & (uv_l[1, :] < img_l.shape[0])
+        valid_u_r = (uv_r[0, :] >= 0) & (uv_r[0, :] < img_r.shape[1])
+        valid_v_r = (uv_r[1, :] >= 0) & (uv_r[1, :] < img_r.shape[0])
+        valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
+        phi_mask = np.zeros(uv_l.shape[1], dtype=bool)
+        phi_mask[phi_id] = True
+        valid_l = (min_thresh < std_l) & (std_l < max_thresh)
+        valid_r = (min_thresh < std_r) & (std_r < max_thresh)
 
-        left_images = []
-        right_images = []
+        valid_std = valid_r & valid_l
 
-        for abs_image_left_32, abs_image_right_32 in zip(sorted(os.listdir('csv/left')), sorted(os.listdir('csv/right'))):
-            left_images.append(self.load_array_from_csv(os.path.join('csv/left', abs_image_left_32)))
-            right_images.append(self.load_array_from_csv(os.path.join('csv/right', abs_image_right_32)))
+        print("valid_uv shape:", valid_uv.shape)
+        print("valid_std shape:", valid_std.shape)
+        print("phi_mask shape:", phi_mask.shape)
+        print("std_l shape:", std_l.shape)
+        print("std_r shape:", std_r.shape)
 
-        left_images = np.stack(left_images, axis=-1).astype(np.float32)
-        right_images = np.stack(right_images, axis=-1).astype(np.float32)
+        return valid_uv & valid_std & phi_mask
+
+    def fringe_zscan(self, left_images, right_images, points_3d, yaml_file, DEBUG=False, SAVE=True):
+    # def fringe_zscan(self, points_3d, yaml_file, DEBUG=False, SAVE=True):
+
+        # left_images = []
+        # right_images = []
+        #
+        # for abs_image_left_32_20241016, abs_image_right_32_20241016 in zip(sorted(os.listdir('csv/left')), sorted(os.listdir('csv/right'))):
+        #     left_images.append(self.load_array_from_csv(os.path.join('csv/left', abs_image_left_32_20241016)))
+        #     right_images.append(self.load_array_from_csv(os.path.join('csv/right', abs_image_right_32_20241016)))
+        #
+        # left_images = np.stack(left_images, axis=-1).astype(np.float32)
+        # right_images = np.stack(right_images, axis=-1).astype(np.float32)
 
         # Read file containing all calibration parameters from stereo system
-        Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr, R, T = self.load_camera_params(yaml_file=yaml_file)
+        Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr = self.load_camera_params(yaml_file=yaml_file)
 
         # Project points on Left and right
         uv_points_L = self.gcs2ccs(points_3d, Kl, Dl, Rl, Tl)
@@ -267,7 +285,12 @@ class inverse_triangulation():
 
         phi_map, phi_min, phi_min_id = self.phase_map(inter_points_L, inter_points_R, points_3d)
 
+        fringe_mask = self.fringe_masks(img_l=left_images, img_r=right_images, uv_l=uv_points_L, uv_r=uv_points_R,
+                               std_l=std_interp_L, std_r=std_interp_R, phi_id=phi_min_id)
+
         filtered_3d_phi = points_3d[np.asarray(phi_min_id, np.int32)]
+
+        filtered_mask = points_3d[fringe_mask]
 
         if DEBUG:
             self.plot_zscan_phi(phi_map=phi_map)
@@ -282,3 +305,6 @@ class inverse_triangulation():
 
         self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
                                       title="Point Cloud of min phase diff")
+
+        self.plot_3d_points(filtered_mask[:, 0], filtered_mask[:, 1], filtered_mask[:, 2], color=None,
+                            title="Fringe Mask")
