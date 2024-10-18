@@ -1,14 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
-import os
 import cv2
+import cupy as cp
+import gc
 
 class inverse_triangulation():
     def __init__(self):
         pass
 
     def points3d(self, x_lim, y_lim, z_lim, xy_step, z_step, visualize=True):
+        """
+            Create a 3D space of combination from linear arrays of X Y Z
+            Parameters:
+                x_lim: Begin and end of linear space of X
+                y_lim: Begin and end of linear space of Y
+                z_lim: Begin and end of linear space of Z
+                xy_step: Step size between X and Y
+                z_step: Step size between Z and X
+                visualize: Visualize the 3D space
+            Returns:
+                cube_points: combination of X Y and Z
+            """
         x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
         y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
         z_lin = np.arange(z_lim[0], z_lim[1], z_step)
@@ -67,6 +80,7 @@ class inverse_triangulation():
         Rr = np.array(params['rot_matrix_right'], dtype=np.float64)
         Tr = np.array(params['t_right'], dtype=np.float64)
 
+        # Rotation and translation between the cameras
         # R = np.array(params['R'], dtype=np.float64)
         # T = np.array(params['T'], dtype=np.float64)
 
@@ -82,6 +96,97 @@ class inverse_triangulation():
         # Load the array from the CSV file
         array = np.loadtxt(filename, delimiter=',')
         return array
+
+    def bi_interpolation_gpu(self, images, uv_points, max_memory_gb=3):
+        """
+        Perform bilinear interpolation on a stack of images at specified uv_points on the GPU,
+        ensuring that each batch uses no more than the specified memory limit.
+
+        Parameters:
+        images: (height, width, num_images) array of images, or (height, width) for a single image.
+        uv_points: (2, N) array of points where N is the number of points.
+        max_memory_gb: Maximum memory to use on the GPU per batch in gigabytes (default 6GB).
+
+        Returns:
+        interpolated: (N, num_images) array of interpolated pixel values, or (N,) for a single image.
+        std: Standard deviation of the corner pixels used for interpolation.
+        """
+        images = cp.asarray(images)
+        uv_points = cp.asarray(uv_points)
+
+        if len(images.shape) == 2:
+            images = images[:, :, cp.newaxis]
+
+        height, width, num_images = images.shape
+        num_points = uv_points.shape[1]
+
+        # Estimate memory usage per point
+        bytes_per_float32 = 8
+        memory_per_point = (4 * num_images * bytes_per_float32)
+        # For left_Igray, right_Igray, and intermediate calculations
+        total_memory_required = num_points * memory_per_point
+
+        # Maximum bytes allowed for memory usage
+        max_bytes = max_memory_gb * 1024 ** 3
+
+        # Adjust the batch size based on memory limitations
+        if total_memory_required > max_bytes:
+            points_per_batch = int(max_bytes // memory_per_point // 100)
+            # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
+        else:
+            points_per_batch = num_points  # Process all points at once
+
+        # print(f"Batch size adjusted to: {batch_size} to fit within {max_memory_gb}GB GPU memory limit.")
+
+        # Initialize output arrays on CPU to accumulate results
+        interpolated_cpu = np.empty((num_points, num_images), dtype=np.float16)
+        std_cpu = np.empty((num_points, num_images), dtype=np.float16)
+
+        # Process points in batches
+        for i in range(0, num_points, points_per_batch):
+            end = min(i + points_per_batch, num_points)
+            uv_batch = uv_points[:, i:end]
+
+            x = uv_batch[0].astype(cp.int32)
+            y = uv_batch[1].astype(cp.int32)
+
+            x1 = cp.clip(cp.floor(x).astype(cp.int32), 0, width - 1)
+            y1 = cp.clip(cp.floor(y).astype(cp.int32), 0, height - 1)
+            x2 = cp.clip(x1 + 1, 0, width - 1)
+            y2 = cp.clip(y1 + 1, 0, height - 1)
+
+            x_diff = x - x1
+            y_diff = y - y1
+
+            for n in range(num_images):  # Process one image at a time
+                p11 = images[y1, x1, n]
+                p12 = images[y2, x1, n]
+                p21 = images[y1, x2, n]
+                p22 = images[y2, x2, n]
+
+                interpolated_batch = (
+                        p11 * (1 - x_diff) * (1 - y_diff) +
+                        p21 * x_diff * (1 - y_diff) +
+                        p12 * (1 - x_diff) * y_diff +
+                        p22 * x_diff * y_diff
+                )
+
+                std_batch = cp.std(cp.vstack([p11, p12, p21, p22]), axis=0)
+
+                interpolated_cpu[i:end, n] = cp.asnumpy(interpolated_batch)
+                std_cpu[i:end, n] = cp.asnumpy(std_batch)
+
+            del p11, p12, p21, p22, std_batch, interpolated_batch
+            # Free memory after each batch
+        # del x1, x2, y1, y2, x2, y2
+        cp.get_default_memory_pool().free_all_blocks()
+        gc.collect()
+
+        if images.shape[2] == 1:
+            interpolated_cpu = interpolated_cpu[:, 0]
+            std_cpu = std_cpu[:, 0]
+
+        return interpolated_cpu, std_cpu
 
     def bi_interpolation(self, images, uv_points, batch_size=10000):
         """
@@ -104,16 +209,16 @@ class inverse_triangulation():
         N = uv_points.shape[1]
 
         # Initialize the output arrays
-        interpolated = np.zeros((N, num_images))
-        std = np.zeros(N)
+        interpolated = np.empty((N, num_images), dtype=np.float32)
+        std = np.empty((N, num_images))
 
         # Process points in batches
         for i in range(0, N, batch_size):
             end = min(i + batch_size, N)
             uv_batch = uv_points[:, i:end]
 
-            x = uv_batch[0].astype(float)
-            y = uv_batch[1].astype(float)
+            x = uv_batch[0].astype(np.int32)
+            y = uv_batch[1].astype(np.int32)
 
             # Ensure x and y are within bounds
             x1 = np.clip(np.floor(x).astype(int), 0, width - 1)
@@ -141,13 +246,20 @@ class inverse_triangulation():
                 )
                 interpolated[i:end, n] = interpolated_batch
 
+                # # Compute standard deviation across the four corners for each point
+                std_batch = np.std(np.vstack([p11, p12, p21, p22]), axis=0)
+                std[i:end, n] = std_batch
+
         # Return 1D interpolated result if the input was a 2D image
         if images.shape[2] == 1:
             interpolated = interpolated[:, 0]
-        std = np.zeros_like((uv_points.shape[0], images.shape[2]))
+            std = std[:, 0]
+
         return interpolated, std
 
+
     def phase_map(self, left_Igray, right_Igray, points_3d):
+        # Calculate de phase difference
         z_step = np.unique(points_3d[:, 2]).shape[0]
         phi_map = []
         phi_min = []
@@ -161,6 +273,14 @@ class inverse_triangulation():
         return phi_map, phi_min, phi_min_id
 
     def undistorted_points(self, norm_points, kc):
+        """
+            Remove distortion from normalized points.
+            Parameters:
+                norm_points: (N, 2) of (X, Y) normalized points
+                distortion: [k1, k2, p1, p2, k3] distortions from camera
+            Returns:
+                undistorted_points: (N, 3) of (X, Y, 1) undistorted points
+            """
         r2 = norm_points[:, 0] ** 2 + norm_points[:, 1] ** 2
         k1, k2, p1, p2, k3 = kc
         factor = (1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3)
@@ -225,6 +345,19 @@ class inverse_triangulation():
         plt.show()
 
     def plot_points_3d_on_image(self, image, points, color=(0, 255, 0), radius=5, thickness=2):
+        """
+            Plot points on an image.
+
+            Parameters:
+            - image: The input image on which points will be plotted.
+            - points: List of (u, v) coordinates to be plotted.
+            - color: The color of the points (default: green).
+            - radius: The radius of the circles to be drawn for each point.
+            - thickness: The thickness of the circle outline.
+
+            Returns:
+            - output_image: The image with the plotted points.
+            """
         output_image = cv2.cvtColor(np.uint8(image), cv2.COLOR_GRAY2BGR)
         for (u, v, _) in points.T:
             cv2.circle(output_image, (int(u), int(v)), radius, color, thickness)
@@ -239,23 +372,20 @@ class inverse_triangulation():
         cv2.waitKey(0)
 
     def fringe_masks(self, img_l, img_r, uv_l, uv_r, std_l, std_r, phi_id, min_thresh=0, max_thresh=1):
+        # Create a mask for filter the points on image
         valid_u_l = (uv_l[0, :] >= 0) & (uv_l[0, :] < img_l.shape[1])
         valid_v_l = (uv_l[1, :] >= 0) & (uv_l[1, :] < img_l.shape[0])
         valid_u_r = (uv_r[0, :] >= 0) & (uv_r[0, :] < img_r.shape[1])
         valid_v_r = (uv_r[1, :] >= 0) & (uv_r[1, :] < img_r.shape[0])
         valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
+
         phi_mask = np.zeros(uv_l.shape[1], dtype=bool)
         phi_mask[phi_id] = True
+
         valid_l = (min_thresh < std_l) & (std_l < max_thresh)
         valid_r = (min_thresh < std_r) & (std_r < max_thresh)
 
         valid_std = valid_r & valid_l
-
-        print("valid_uv shape:", valid_uv.shape)
-        print("valid_std shape:", valid_std.shape)
-        print("phi_mask shape:", phi_mask.shape)
-        print("std_l shape:", std_l.shape)
-        print("std_r shape:", std_r.shape)
 
         return valid_uv & valid_std & phi_mask
 
@@ -279,19 +409,28 @@ class inverse_triangulation():
         uv_points_L = self.gcs2ccs(points_3d, Kl, Dl, Rl, Tl)
         uv_points_R = self.gcs2ccs(points_3d, Kr, Dr, Rr, Tr)
 
+        # Interpolate with gpu reprojected points to image bounds (return pixel intensity)
+        # inter_points_L, std_interp_L = self.bi_interpolation_gpu(left_images, uv_points_L)
+        # inter_points_R, std_interp_R = self.bi_interpolation_gpu(right_images, uv_points_R)
+
         # Interpolate reprojected points to image bounds (return pixel intensity)
         inter_points_L, std_interp_L = self.bi_interpolation(left_images, uv_points_L)
         inter_points_R, std_interp_R = self.bi_interpolation(right_images, uv_points_R)
 
+        # Calculate the phase difference
         phi_map, phi_min, phi_min_id = self.phase_map(inter_points_L, inter_points_R, points_3d)
 
+        # Apply the fringe mask
         fringe_mask = self.fringe_masks(img_l=left_images, img_r=right_images, uv_l=uv_points_L, uv_r=uv_points_R,
                                std_l=std_interp_L, std_r=std_interp_R, phi_id=phi_min_id)
 
+        # Filter the points 3D according to min phase difference
         filtered_3d_phi = points_3d[np.asarray(phi_min_id, np.int32)]
 
+        # Filter the points 3D according to fringe mask
         filtered_mask = points_3d[fringe_mask]
 
+        # Plot the points in image and build the point cloud
         if DEBUG:
             self.plot_zscan_phi(phi_map=phi_map)
 

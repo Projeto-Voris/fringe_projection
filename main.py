@@ -7,8 +7,6 @@ import numpy as np
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
 import inverse_triangulation
-import fringe_process
-import Distortion_correction
 
 def  main():
     VISUALIZE = True
@@ -93,14 +91,19 @@ def  main():
             stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
             stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
 
+        # Acquired the abs images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images()
 
         zscan = inverse_triangulation.inverse_triangulation()
-        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/SM4_20241015.yaml'
 
+        # read the yaml_file
+        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241018_bouget.yaml'
+
+        # Acquired the points 3D
         # points_3d = zscan.points3d(x_lim=(0, 200), y_lim=(0, 200), z_lim=(-200, 200), xy_step=10, z_step=0.1, visualize=False)
         points_3d = zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
 
+        # Interpolated the points and build the point cloud
         zscan.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
         # zscan.fringe_zscan(yaml_file=yaml_file, points_3d=points_3d)
 
