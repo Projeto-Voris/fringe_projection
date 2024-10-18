@@ -176,7 +176,7 @@ def fringe_zscan(points_3d, yaml_file, DEBUG=False, SAVE=True):
     fringe_process.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None, title="Point Cloud of min phase diff")
 
 def main():
-    yaml_file = 'C:/Users/bianca.rosa/PycharmProjects/fringe_projection/Params/SM4_20241004_bianca.yaml'
+    yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/SM4_20241004_bianca.yaml'
 
     points_3d = fringe_process.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
 

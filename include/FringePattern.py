@@ -1,6 +1,5 @@
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
 class FringePattern:
 
     def __init__(self, resolution=(1024, 768), px_f=20, steps=4):
@@ -32,6 +31,7 @@ class FringePattern:
         for i in range(self.fr_images.shape[2]):
             cv2.imshow('Image', self.fr_images[:, :, i])
             cv2.waitKey(0)
+        cv2.destroyWindow('Image')
 
     def print_image(self): # reading shape 0 e 1
         """
