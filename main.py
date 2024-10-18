@@ -10,17 +10,17 @@ import inverse_triangulation
 import fringe_process
 import Distortion_correction
 
-def main():
+def  main():
     VISUALIZE = True
     cv2.namedWindow('projector', cv2.WINDOW_NORMAL)
 
     move = (0, 0)
     width, height = 1024, 1024
     img_resolution = (width, height)
-    pixel_per_fringe = 256
-    steps = 4
-    path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
-   # path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
+    pixel_per_fringe = 32
+    steps = 8
+    # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
+    path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
 
 
@@ -29,7 +29,7 @@ def main():
     print("Serial: {}".format(stereo_ctrl.get_serial_numbers()))
 
     for m in screeninfo.get_monitors():
-        if m.name == '\\\\.\\DISPLAY3':
+        if m.name == 'DP-3':
             move = (m.x, m.y)
             img_resolution = (m.width, m.height)
 
@@ -93,12 +93,16 @@ def main():
             stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
             stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
 
-        zscan = inverse_triangulation.inverse_triangulation()
-        yaml_file = 'C:/Users/bianca.rosa/PycharmProjects/fringe_projection/Params/SM4_20241004_bianca.yaml'
+        abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images()
 
-        points_3d = fringe_process.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7,
-                                            z_step=0.1, visualize=False)
-        zscan.fringe_zscan(yaml_file=yaml_file, points_3d=points_3d)
+        zscan = inverse_triangulation.inverse_triangulation()
+        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/SM4_20241015.yaml'
+
+        # points_3d = zscan.points3d(x_lim=(0, 200), y_lim=(0, 200), z_lim=(-200, 200), xy_step=10, z_step=0.1, visualize=False)
+        points_3d = zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
+
+        zscan.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
+        # zscan.fringe_zscan(yaml_file=yaml_file, points_3d=points_3d)
 
 
 if __name__ == '__main__':
