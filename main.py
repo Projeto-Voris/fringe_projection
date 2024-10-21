@@ -8,7 +8,7 @@ from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
 import inverse_triangulation
 
-def  main():
+def main():
     VISUALIZE = True
     cv2.namedWindow('projector', cv2.WINDOW_NORMAL)
 
@@ -27,7 +27,7 @@ def  main():
     print("Serial: {}".format(stereo_ctrl.get_serial_numbers()))
 
     for m in screeninfo.get_monitors():
-        if m.name == 'DP-3':
+        if m.name == '\\\\.\\DISPLAY3':
             move = (m.x, m.y)
             img_resolution = (m.width, m.height)
 
