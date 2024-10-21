@@ -27,7 +27,8 @@ def main():
     print("Serial: {}".format(stereo_ctrl.get_serial_numbers()))
 
     for m in screeninfo.get_monitors():
-        if m.name == '\\\\.\\DISPLAY3':
+
+        if m.name == 'DP-3':
             move = (m.x, m.y)
             img_resolution = (m.width, m.height)
 
