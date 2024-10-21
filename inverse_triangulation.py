@@ -390,17 +390,6 @@ class inverse_triangulation():
         return valid_uv & valid_std & phi_mask
 
     def fringe_zscan(self, left_images, right_images, points_3d, yaml_file, DEBUG=False, SAVE=True):
-    # def fringe_zscan(self, points_3d, yaml_file, DEBUG=False, SAVE=True):
-
-        # left_images = []
-        # right_images = []
-        #
-        # for abs_image_left_32_20241016, abs_image_right_32_20241016 in zip(sorted(os.listdir('csv/left')), sorted(os.listdir('csv/right'))):
-        #     left_images.append(self.load_array_from_csv(os.path.join('csv/left', abs_image_left_32_20241016)))
-        #     right_images.append(self.load_array_from_csv(os.path.join('csv/right', abs_image_right_32_20241016)))
-        #
-        # left_images = np.stack(left_images, axis=-1).astype(np.float32)
-        # right_images = np.stack(right_images, axis=-1).astype(np.float32)
 
         # Read file containing all calibration parameters from stereo system
         Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr = self.load_camera_params(yaml_file=yaml_file)
