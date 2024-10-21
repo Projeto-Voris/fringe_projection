@@ -154,10 +154,8 @@ class StereoCameraControllerTrigger:
         os.makedirs(os.path.join(path, 'left'), exist_ok=True)
         os.makedirs(os.path.join(path, 'right'), exist_ok=True)
         try:
-            cv2.imwrite(os.path.join(os.path.join(path, 'left'), 'L' + str(counter).rjust(3, '0') + img_format),
-                        self.img_left)
-            cv2.imwrite(os.path.join(os.path.join(path, 'right'), 'R' + str(counter).rjust(3, '0') + img_format),
-                        self.img_right)
+            cv2.imwrite(os.path.join(os.path.join(path, 'left'), 'L' + str(counter).rjust(3, '0') + img_format),self.img_left)
+            cv2.imwrite(os.path.join(os.path.join(path, 'right'), 'R' + str(counter).rjust(3, '0') + img_format), self.img_right)
             print('Image {} captured successfully.'.format(counter))
         except PySpin.SpinnakerException as ex:
             print(f"Error: {ex}")

@@ -6,6 +6,7 @@ import PySpin
 import numpy as np
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
+import inverse_triangulation
 
 def main():
     VISUALIZE = True
@@ -14,10 +15,10 @@ def main():
     move = (0, 0)
     width, height = 1024, 1024
     img_resolution = (width, height)
-    pixel_per_fringe = 128
-    steps = 4
+    pixel_per_fringe = 32
+    steps = 8
     # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
-    path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
+    path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
 
 
@@ -26,6 +27,7 @@ def main():
     print("Serial: {}".format(stereo_ctrl.get_serial_numbers()))
 
     for m in screeninfo.get_monitors():
+
         if m.name == 'DP-3':
             move = (m.x, m.y)
             img_resolution = (m.width, m.height)
@@ -74,6 +76,7 @@ def main():
         stereo_ctrl.stop_acquisition()
         stereo_ctrl.cleanup()
         # stereo.normalize_b_w()
+
         if k != 27:
             #     width, height, _ = self.images_left.shape
             bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
@@ -87,9 +90,23 @@ def main():
             stereo.calculate_qsi_images()
             stereo.calculate_remaped_qsi_images()
             stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
-            stereo.plot_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
             stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
 
+        # Acquired the abs images
+        abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images()
+
+        zscan = inverse_triangulation.inverse_triangulation()
+
+        # read the yaml_file
+        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241018_bouget.yaml'
+
+        # Acquired the points 3D
+        # points_3d = zscan.points3d(x_lim=(0, 200), y_lim=(0, 200), z_lim=(-200, 200), xy_step=10, z_step=0.1, visualize=False)
+        points_3d = zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
+
+        # Interpolated the points and build the point cloud
+        zscan.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
+        # zscan.fringe_zscan(yaml_file=yaml_file, points_3d=points_3d)
 
 
 if __name__ == '__main__':

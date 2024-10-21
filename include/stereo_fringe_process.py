@@ -11,7 +11,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
     def __init__(self, img_resolution=(1024, 768), camera_resolution=(1600, 1200), px_f=16, steps=4):
         """
             Inicializa uma instância da classe com parâmetros específicos de resolução e configuração.
-
             Este método inicializa as variáveis necessárias para o processamento de imagens, incluindo
             imagens remapeadas e de fase para a esquerda e direita, bem como imagens capturadas pela câmera.
         """
@@ -35,12 +34,10 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
     def min_bits_gc(self, x):
         """
             Calcula o número mínimo de bits necessários para representar um número em código Gray.
-
             Parameters:
             -----------
             x : int
                 Número positivo para o qual se deseja calcular o número mínimo de bits necessários.
-
             Returns:
             --------
             int
@@ -48,7 +45,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         """
         if x <= 0:
             raise ValueError("Input must be a positive integer.")
-        return math.ceil(math.log2(x)+1)
+        return math.ceil(math.log2(x) + 1)
 
     def normalize_white(self, mask_left, mask_right):
         """
@@ -176,7 +173,47 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         abs_phi_image_right[mask_right3] = self.phi_image_right[mask_right3] + 2 * np.pi * (
                 np.floor((self.remaped_qsi_image_right[mask_right3] + 1) / 2) - 1) + np.pi
 
-        return abs_phi_image_left, abs_phi_image_right
+        min_value = np.min(abs_phi_image_left)
+        max_value = np.max(abs_phi_image_left)
+        abs_phi_image_left_remaped = 255 * (abs_phi_image_left - min_value) / (max_value - min_value)
+
+        min_value_r = np.min(abs_phi_image_right)
+        max_value_r = np.max(abs_phi_image_right)
+        abs_phi_image_right_remaped = 255 * (abs_phi_image_right - min_value_r) / (max_value_r - min_value_r)
+
+        return abs_phi_image_left_remaped, abs_phi_image_right_remaped
+
+    def apply_mask_otsu_threshold(self, image):
+        """
+        Aplica Otsu thresholding a cada uma das camadas de uma imagem de múltiplos canais (franjas)
+        e gera uma máscara para separar franjas do fundo.
+        Parameters:
+        -----------
+        image : np.ndarray
+            A imagem com múltiplos canais, onde cada canal é uma imagem com franjas mudando de fase.
+        max_value : int
+            Valor máximo a ser atribuído aos pixels acima do limiar (geralmente 255).
+        Returns:
+        --------
+        mask : np.ndarray
+            A máscara binária resultante após aplicar Otsu thresholding.
+        """
+        # Inicializa a máscara com zeros
+        mask = np.zeros(image.shape[:2], dtype=np.uint8)
+
+        # Aplicar Otsu thresholding a cada camada individualmente
+        for i in range(image.shape[2]):
+            gray_image = image[:, :, i]
+            _, thresh = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            mask = np.maximum(mask, thresh)  # Combinar os thresholdings das camadas para criar a máscara
+
+        # Expandir a máscara para o número de canais da imagem original
+        mask_expanded = np.stack([mask] * image.shape[2], axis=-1)
+
+        # Aplicar a máscara à imagem original
+        masked_image = cv2.bitwise_and(image, image, mask=mask_expanded[:, :, 0])  # Usar apenas a 1ª camada da máscara
+
+        return masked_image
 
     def calculate_phi(self, image):
         """
@@ -199,16 +236,24 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                 Uma matriz NumPy bidimensional representando a imagem Phi. Cada valor de pixel na imagem corresponde
                 ao ângulo Phi calculado para aquele pixel com base nas contribuições de seno e cosseno dos canais.
             """
+
+        # Aplicar a máscara com o otsu threshold
+        masked_image = self.apply_mask_otsu_threshold(image)
+
         # Calcular os valores de seno e cosseno para todos os canais de uma vez
-        indices = np.arange(1, image.shape[2]+1)
-        angle = 2 * np.pi * indices / image.shape[2]
+        # indices = np.arange(1, image.shape[2]+1)
+        # angle = 2 * np.pi * indices / image.shape[2]
+        indices = np.arange(1, masked_image.shape[2] + 1)
+        angle = 2 * np.pi * indices / masked_image.shape[2]
 
         sin_values = np.sin(angle)
         cos_values = np.cos(angle)
 
         # Multiplicar a imagem pelos valores de seno e cosseno
-        sin_contributions = np.sum(image * sin_values, axis=2)
-        cos_contributions = np.sum(image * cos_values, axis=2)
+        # sin_contributions = np.sum(image * sin_values, axis=2)
+        # cos_contributions = np.sum(image * cos_values, axis=2)
+        sin_contributions = np.sum(masked_image * sin_values, axis=2)
+        cos_contributions = np.sum(masked_image * cos_values, axis=2)
 
         # Calcular Phi para cada pixel
         phi_image = np.arctan2(-sin_contributions, cos_contributions)
@@ -244,12 +289,24 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
         # Comparar os bits relevantes com o branco correspondente
         bit_values = graycode_image[:, :, 2:] / white_value[:, :, None]
-        bit_values = (bit_values > 0.6).astype(int)
+        bit_values = (bit_values > 0.8).astype(int)
+        # bit_values = (bit_values > 0.5).astype(int)
 
         # Converter cada linha de bits em um único número inteiro
         qsi_image = np.dot(bit_values, 2 ** np.arange(bit_values.shape[-1])[::-1])
 
         return qsi_image
+
+    def save_array_to_csv(self, array, filename):
+        """
+        Save a 2D NumPy array to a CSV file.
+
+        :param array: 2D numpy array
+        :param filename: Output CSV filename
+        """
+        # Save the 2D array as a CSV file
+        np.savetxt(filename, array, delimiter=',')
+        print(f"Array saved to {filename}")
 
     def remap_qsi_image(self, qsi_image, real_qsi_order):
         """
@@ -337,6 +394,17 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         plt.tight_layout()
         plt.show()
 
+    def save_array_to_csv(self, array, filename):
+        """
+        Save a 2D NumPy array to a CSV file.
+
+        :param array: 2D numpy array
+        :param filename: Output CSV filename
+        """
+        # Save the 2D array as a CSV file
+        np.savetxt(filename, array, delimiter=',')
+        print(f"Array saved to {filename}")
+
     def plot_abs_phase_map(self, name='Plot'):
         """
             Plota gráficos 1D e 2D das imagens de fase absoluta e QSI remapeada.
@@ -352,6 +420,9 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         abs_phi_image_left, abs_phi_image_right = self.calculate_abs_phi_images()
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
+        # self.save_array_to_csv(abs_phi_image_left, filename='abs_image_left_32_20241016.csv')
+        # self.save_array_to_csv(abs_phi_image_right, filename='abs_image_right_32_20241016.csv')
+
         middle_index_left = int(self.images_left.shape[1] / 2)
         middle_index_right = int(self.images_right.shape[1] / 2)
 
@@ -362,7 +433,17 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                            self.remaped_qsi_image_right[middle_index_right, :], 'Abs Phi Image right 1D', 'Abs Phi Image right')
 
         self.plot_2d_image(axes[1, 0], abs_phi_image_left, 'Abs Phi Image left 2D')
+        # min_value = np.min(abs_phi_image_left)
+        # max_value = np.max(abs_phi_image_left)
+        # image_remaped = 255 * (abs_phi_image_left - min_value) / (max_value - min_value)
+        # image_remaped = image_remaped.astype(np.uint8)
+        # cv2.imwrite('abs_phi_image_left_14.png', image_remaped)
         self.plot_2d_image(axes[1, 1], abs_phi_image_right, 'Abs Phi Image right 2D')
+        # min_value_r = np.min(abs_phi_image_right)
+        # max_value_r = np.max(abs_phi_image_right)
+        # image_remaped_r = 255 * (abs_phi_image_right - min_value_r) / (max_value_r - min_value_r)
+        # image_remaped_r = image_remaped_r.astype(np.uint8)
+        # cv2.imwrite('abs_phi_image_right_14.png', image_remaped_r)
 
         fig.suptitle('Fase absoluta {}'.format(name))
 
