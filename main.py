@@ -1,6 +1,5 @@
 import os
 import cv2
-import matplotlib.pyplot as plt
 import screeninfo
 import PySpin
 import numpy as np
@@ -80,19 +79,22 @@ def main():
             #     width, height, _ = self.images_left.shape
             bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
             br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-            stereo.calculate_phi_images()
+            # stereo.calculate_phi(stereo.images_left[:, :, :int(stereo.get_steps())])
             white_left, white_right = stereo.normalize_white(bl, br)
             # plt.imshow(bl, cmap='gray')
             # plt.show()
             # plt.imshow(br, cmap='gray')
             # plt.show()
-            stereo.calculate_qsi_images()
-            stereo.calculate_remaped_qsi_images()
+            # qsi_left = stereo.calculate_qsi(stereo.images_left[:, :, 8:])
+            # qsi_right = stereo.calculate_qsi(stereo.images_right[:, :, 8:])
+            # stereo.remap_qsi_image(qsi_left, stereo.get_gc_order_v())
+            # stereo.remap_qsi_image(qsi_right, stereo.get_gc_order_v())
             # stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
             # stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            stereo.calculate_abs_phi_images(visualize=False)
 
         # Acquired the abs images
-        abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images()
+        abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
 
         zscan = inverse_triangulation.inverse_triangulation()
 
