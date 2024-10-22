@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import matplotlib.pyplot as plt
 import math
@@ -61,7 +63,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         media_branco_max_left = np.mean(self.images_left[:, :, self.steps][mask_left == 255])
         media_branco_max_right = np.mean(self.images_right[:, :, self.steps][mask_right == 255])
 
-        print("media dos brancos right:", media_branco_max_right)
+        # print("media dos brancos right:", media_branco_max_right)
 
         return media_branco_max_left, media_branco_max_right
 
@@ -288,7 +290,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                 Uma matriz NumPy bidimensional representando a imagem de fase absoluta correspondente à imagem
                 `phi_image_right`. Os valores da fase estão em radianos.
         """
-
+        t0 = time.time()
         phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))], visualize=False)
         phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))], visualize=False)
 
@@ -359,7 +361,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
             plt.tight_layout()
             plt.show()
-
+        print('Process abs phase: {} dt'.format(round(time.time()-t0,2)))
         return abs_phi_image_left_remaped, abs_phi_image_right_remaped
 
     def plot_1d_phase(self, ax, phi_image, remaped_qsi_image, title, ylabel):

@@ -1,9 +1,12 @@
+import time
+
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
 import cv2
 import cupy as cp
 import gc
+
 
 class inverse_triangulation():
     def __init__(self):
@@ -257,7 +260,6 @@ class inverse_triangulation():
 
         return interpolated, std
 
-
     def phase_map(self, left_Igray, right_Igray, points_3d):
         # Calculate de phase difference
         z_step = np.unique(points_3d[:, 2]).shape[0]
@@ -286,7 +288,9 @@ class inverse_triangulation():
         factor = (1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3)
         x_corrected = norm_points[:, 0] * factor + 2 * p1 * norm_points[:, 0] * norm_points[:, 1] + p2 * (
                 r2 + 2 * norm_points[:, 0] ** 2)
-        y_corrected = norm_points[:, 1] * factor + p1 * (r2 + 2 * norm_points[:, 1] ** 2) + 2 * p2 * norm_points[:, 0] * norm_points[:, 1]
+        y_corrected = norm_points[:, 1] * factor + p1 * (r2 + 2 * norm_points[:, 1] ** 2) + 2 * p2 * norm_points[:,
+                                                                                                     0] * norm_points[:,
+                                                                                                          1]
 
         return np.hstack((np.stack([x_corrected, y_corrected], axis=-1), np.ones((norm_points.shape[0], 1))))
 
@@ -391,6 +395,7 @@ class inverse_triangulation():
 
     def fringe_zscan(self, left_images, right_images, yaml_file, points_3d, DEBUG=False, SAVE=True):
 
+        t0 = time.time()
         # Read file containing all calibration parameters from stereo system
         Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr = self.load_camera_params(yaml_file=yaml_file)
 
@@ -411,7 +416,7 @@ class inverse_triangulation():
 
         # Apply the fringe mask
         fringe_mask = self.fringe_masks(img_l=left_images, img_r=right_images, uv_l=uv_points_L, uv_r=uv_points_R,
-                               std_l=std_interp_L, std_r=std_interp_R, phi_id=phi_min_id)
+                                        std_l=std_interp_L, std_r=std_interp_R, phi_id=phi_min_id)
 
         # Filter the points 3D according to min phase difference
         filtered_3d_phi = points_3d[np.asarray(phi_min_id, np.int32)]
@@ -432,7 +437,8 @@ class inverse_triangulation():
             np.savetxt('./fringe_points.txt', filtered_3d_phi, delimiter='\t', fmt='%.3f')
 
         self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
-                                      title="Point Cloud of min phase diff")
+                            title="Point Cloud of min phase diff")
 
         self.plot_3d_points(filtered_mask[:, 0], filtered_mask[:, 1], filtered_mask[:, 2], color=None,
                             title="Fringe Mask")
+        print('Inverse Trinagulation process: {} dt'.format(round(time.time() - t0, 2)))
