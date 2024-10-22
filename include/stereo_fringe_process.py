@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import cv2
-# Import classes
 from include.FringePattern import FringePattern
 from include.GrayCode import GrayCode
 
@@ -297,17 +296,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
         return qsi_image
 
-    def save_array_to_csv(self, array, filename):
-        """
-        Save a 2D NumPy array to a CSV file.
-
-        :param array: 2D numpy array
-        :param filename: Output CSV filename
-        """
-        # Save the 2D array as a CSV file
-        np.savetxt(filename, array, delimiter=',')
-        print(f"Array saved to {filename}")
-
     def remap_qsi_image(self, qsi_image, real_qsi_order):
         """
         Remapeia os valores de uma imagem QSI de acordo com uma nova ordem QSI real.
@@ -394,17 +382,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         plt.tight_layout()
         plt.show()
 
-    def save_array_to_csv(self, array, filename):
-        """
-        Save a 2D NumPy array to a CSV file.
-
-        :param array: 2D numpy array
-        :param filename: Output CSV filename
-        """
-        # Save the 2D array as a CSV file
-        np.savetxt(filename, array, delimiter=',')
-        print(f"Array saved to {filename}")
-
     def plot_abs_phase_map(self, name='Plot'):
         """
             Plota gráficos 1D e 2D das imagens de fase absoluta e QSI remapeada.
@@ -419,9 +396,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         """
         abs_phi_image_left, abs_phi_image_right = self.calculate_abs_phi_images()
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-
-        # self.save_array_to_csv(abs_phi_image_left, filename='abs_image_left_32_20241016.csv')
-        # self.save_array_to_csv(abs_phi_image_right, filename='abs_image_right_32_20241016.csv')
 
         middle_index_left = int(self.images_left.shape[1] / 2)
         middle_index_right = int(self.images_right.shape[1] / 2)
@@ -438,7 +412,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         fig.suptitle('Fase absoluta {}'.format(name))
 
         plt.tight_layout()
-        # plt.savefig('abs_phi_images.png', dpi=300, bbox_inches='tight')
         plt.show()
 
     def plot_qsi_map(self, name='Plot'):

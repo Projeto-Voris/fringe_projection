@@ -17,7 +17,6 @@ def main():
     img_resolution = (width, height)
     pixel_per_fringe = 32
     steps = 8
-    # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
     path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
 
@@ -83,14 +82,14 @@ def main():
             br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
             stereo.calculate_phi_images()
             white_left, white_right = stereo.normalize_white(bl, br)
-            plt.imshow(bl, cmap='gray')
-            plt.show()
-            plt.imshow(br, cmap='gray')
-            plt.show()
+            # plt.imshow(bl, cmap='gray')
+            # plt.show()
+            # plt.imshow(br, cmap='gray')
+            # plt.show()
             stereo.calculate_qsi_images()
             stereo.calculate_remaped_qsi_images()
-            stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
-            stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            # stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            # stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
 
         # Acquired the abs images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images()

@@ -389,7 +389,7 @@ class inverse_triangulation():
 
         return valid_uv & valid_std & phi_mask
 
-    def fringe_zscan(self, left_images, right_images, points_3d, yaml_file, DEBUG=False, SAVE=True):
+    def fringe_zscan(self, left_images, right_images, yaml_file, points_3d, DEBUG=False, SAVE=True):
 
         # Read file containing all calibration parameters from stereo system
         Kl, Dl, Rl, Tl, Kr, Dr, Rr, Tr = self.load_camera_params(yaml_file=yaml_file)
@@ -399,12 +399,12 @@ class inverse_triangulation():
         uv_points_R = self.gcs2ccs(points_3d, Kr, Dr, Rr, Tr)
 
         # Interpolate with gpu reprojected points to image bounds (return pixel intensity)
-        # inter_points_L, std_interp_L = self.bi_interpolation_gpu(left_images, uv_points_L)
-        # inter_points_R, std_interp_R = self.bi_interpolation_gpu(right_images, uv_points_R)
+        inter_points_L, std_interp_L = self.bi_interpolation_gpu(left_images, uv_points_L)
+        inter_points_R, std_interp_R = self.bi_interpolation_gpu(right_images, uv_points_R)
 
         # Interpolate reprojected points to image bounds (return pixel intensity)
-        inter_points_L, std_interp_L = self.bi_interpolation(left_images, uv_points_L)
-        inter_points_R, std_interp_R = self.bi_interpolation(right_images, uv_points_R)
+        # inter_points_L, std_interp_L = self.bi_interpolation(left_images, uv_points_L)
+        # inter_points_R, std_interp_R = self.bi_interpolation(right_images, uv_points_R)
 
         # Calculate the phase difference
         phi_map, phi_min, phi_min_id = self.phase_map(inter_points_L, inter_points_R, points_3d)
