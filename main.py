@@ -1,13 +1,12 @@
 import os
 import cv2
-import matplotlib.pyplot as plt
 import screeninfo
 import PySpin
 import numpy as np
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
 import inverse_triangulation
-
+from include.InverseTriangulation import InverseTriangulation
 def main():
     VISUALIZE = True
     cv2.namedWindow('projector', cv2.WINDOW_NORMAL)
@@ -17,8 +16,7 @@ def main():
     img_resolution = (width, height)
     pixel_per_fringe = 32
     steps = 8
-    # path = 'C:\\Users\\bianca.rosa\\PycharmProjects\\fringe_projection'
-    path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
+    path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
 
 
@@ -81,33 +79,36 @@ def main():
             #     width, height, _ = self.images_left.shape
             bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
             br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-            stereo.calculate_phi_images()
+            # stereo.calculate_phi(stereo.images_left[:, :, :int(stereo.get_steps())])
             white_left, white_right = stereo.normalize_white(bl, br)
-            plt.imshow(bl, cmap='gray')
-            plt.show()
-            plt.imshow(br, cmap='gray')
-            plt.show()
-            stereo.calculate_qsi_images()
-            stereo.calculate_remaped_qsi_images()
-            stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
-            stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            # plt.imshow(bl, cmap='gray')
+            # plt.show()
+            # plt.imshow(br, cmap='gray')
+            # plt.show()
+            # qsi_left = stereo.calculate_qsi(stereo.images_left[:, :, 8:])
+            # qsi_right = stereo.calculate_qsi(stereo.images_right[:, :, 8:])
+            # stereo.remap_qsi_image(qsi_left, stereo.get_gc_order_v())
+            # stereo.remap_qsi_image(qsi_right, stereo.get_gc_order_v())
+            # stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            # stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
+            stereo.calculate_abs_phi_images(visualize=False)
 
         # Acquired the abs images
-        abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images()
-
-        zscan = inverse_triangulation.inverse_triangulation()
-
+        abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
         # read the yaml_file
-        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241018_bouget.yaml'
+        yaml_file = '/home/daniel/PycharmProjects/fringe_projection/params/20241018_bouget.yaml'
 
-        # Acquired the points 3D
-        # points_3d = zscan.points3d(x_lim=(0, 200), y_lim=(0, 200), z_lim=(-200, 200), xy_step=10, z_step=0.1, visualize=False)
-        points_3d = zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
+        # zscan_1 = inverse_triangulation.inverse_triangulation()
+        # # Acquired the points 3D
+        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
+        # # Interpolated the points and build the point cloud
+        # zscan_1.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
 
-        # Interpolated the points and build the point cloud
-        zscan.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
-        # zscan.fringe_zscan(yaml_file=yaml_file, points_3d=points_3d)
-
+        # Inverse Triangulation for Fringe projection
+        zscan = InverseTriangulation(yaml_file)
+        zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
+        zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right)
+        z_zcan_points = zscan.fringe_process(save_points=False, visualize=True)
 
 if __name__ == '__main__':
     main()
