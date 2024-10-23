@@ -98,7 +98,6 @@ def main():
         # read the yaml_file
         yaml_file = '/home/daniel/PycharmProjects/fringe_projection/params/20241018_bouget.yaml'
 
-
         # zscan_1 = inverse_triangulation.inverse_triangulation()
         # # Acquired the points 3D
         # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
