@@ -46,8 +46,11 @@ Para a criação do algoritmo de projeção de franjas, foram desenvolvidas algu
 **FringePattern:**
 Biblioteca responsável por criar e obter as imagens de franjas senoidais.
 
-**GrayCode:**Biblioteca responsável por criar e obter as imagens de código Gray. Outra funcionalidade desse código é converter uma lista de inteiros em suas representações binárias no código Gray e também ordenar os valores do código Gray de acordo com sua posição na imagem.
+**GrayCode:**
+Biblioteca responsável por criar e obter as imagens de código Gray. Outra funcionalidade desse código é converter uma lista de inteiros em suas representações binárias no código Gray e também ordenar os valores do código Gray de acordo com sua posição na imagem.
 
-**stereo_fringe_process:**Biblioteca responsável por todo o processamento das imagens capturadas, realizando os devidos cálculos para a obtenção do mapa de fase absoluto.
+**stereo_fringe_process:**
+Biblioteca responsável por todo o processamento das imagens capturadas, realizando os devidos cálculos para a obtenção do mapa de fase absoluto.
 
-**InverseTriangulation:**Biblioteca responsável por criar a nuvem de pontos. Todas as funções nesse módulo foram baseadas no método de triangulação inversa.
+**InverseTriangulation:**
+Biblioteca responsável por criar a nuvem de pontos. Todas as funções nesse módulo foram baseadas no método de triangulação inversa.
