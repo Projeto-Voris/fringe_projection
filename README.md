@@ -54,3 +54,6 @@ Biblioteca responsável por todo o processamento das imagens capturadas, realiza
 
 **InverseTriangulation:**
 Biblioteca responsável por criar a nuvem de pontos. Todas as funções nesse módulo foram baseadas no método de triangulação inversa.
+
+**StereoCameraController:**
+Biblioteca responsável por obter os parâmetros das câmeras, bem como pela captura e salvamento das imagens obtidas.

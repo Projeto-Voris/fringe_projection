@@ -45,17 +45,20 @@ class inverse_triangulation():
 
         delta_x = np.array_split(x_lin, delta)
         delta_y = np.array_split(y_lin, delta)
-        delta_z = np.array_split(z_lin, delta)
 
-        c_points = []
+        # Lista para armazenar todos os pontos de todas as regiões
+        all_points = []
+
         for x_part in delta_x:
             for y_part in delta_y:
-                for z_part in delta_z:
-                    mg1, mg2, mg3 = np.meshgrid(x_part, y_part, z_part, indexing='ij')
-                    points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
-                    c_points.append(points)
+                mg1, mg2, mg3 = np.meshgrid(x_part, y_part, z_lin, indexing='ij')
+                points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
 
-        c_points = np.concatenate(c_points, axis=0)
+                # Adiciona os pontos da região à lista principal
+                all_points.append(points)
+
+        # Concatena todas as regiões em uma única nuvem de pontos
+        c_points = np.concatenate(all_points, axis=0)
 
         if visualize:
             self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
@@ -460,8 +463,8 @@ class inverse_triangulation():
         if SAVE:
             np.savetxt('./fringe_points.txt', filtered_3d_phi, delimiter='\t', fmt='%.3f')
 
-        self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
-                            title="Point Cloud of min phase diff")
+        # self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
+        #                     title="Point Cloud of min phase diff")
 
         self.plot_3d_points(filtered_mask[:, 0], filtered_mask[:, 1], filtered_mask[:, 2], color=None,
                             title="Fringe Mask")

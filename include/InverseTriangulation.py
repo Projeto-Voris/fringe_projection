@@ -67,6 +67,29 @@ class InverseTriangulation:
         self.uv_left = self.transform_gcs2ccs(cam_name='left')
         self.uv_right = self.transform_gcs2ccs(cam_name='right')
 
+    # def points3d(self, x_lim, y_lim, z_lim, xy_step, delta, z_step, visualize=True):
+    #     x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
+    #     y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
+    #     z_lin = np.arange(z_lim[0], z_lim[1], z_step)
+    #
+    #     delta_x = np.array_split(x_lin, delta)
+    #     delta_y = np.array_split(y_lin, delta)
+    #
+    #     c_points = []
+    #     for x_part in delta_x:
+    #         for y_part in delta_y:
+    #             mg1, mg2, mg3 = np.meshgrid(x_part, y_part, z_lin, indexing='ij')
+    #             points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
+    #             c_points.append(points)
+    #
+    #
+    #     c_points = np.concatenate(c_points, axis=0)
+    #
+    #     if visualize:
+    #         self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
+    #
+    #     return c_points
+
     def plot_3d_points(self, x, y, z, color=None, title='Plot 3D of max correlation points'):
         """
         Plot 3D points as scatter points where color is based on Z value
@@ -115,8 +138,8 @@ class InverseTriangulation:
         self.camera_params['right']['r'] = np.array(params['rot_matrix_right'], dtype=np.float64)
         self.camera_params['right']['t'] = np.array(params['t_right'], dtype=np.float64)
 
-        self.camera_params['stereo']['R'] = np.array(params['R'], dtype=np.float64)
-        self.camera_params['stereo']['T'] = np.array(params['T'], dtype=np.float64)
+        # self.camera_params['stereo']['R'] = np.array(params['R'], dtype=np.float64)
+        # self.camera_params['stereo']['T'] = np.array(params['T'], dtype=np.float64)
 
     def save_points(self, data, filename, delimiter=','):
         """
@@ -413,7 +436,7 @@ class InverseTriangulation:
 
         return valid_uv & valid_std & phi_mask
 
-    def fringe_process(self, save_points=True, visualize=False):
+    def fringe_process(self,save_points=True, visualize=False):
         """
         Zscan for stereo fringe process
         Parameters:
