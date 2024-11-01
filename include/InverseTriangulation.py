@@ -38,57 +38,68 @@ class InverseTriangulation:
         self.left_images = left_imgs
         self.right_images = right_imgs
 
-    def points3d(self, x_lim=(-5, 5), y_lim=(-5, 5), z_lim=(0, 5), xy_step=1.0, z_step=1.0, visualize=False):
-        """
-            Create a 3D space of combination from linear arrays of X Y Z
-            Parameters:
-                x_lim: Begin and end of linear space of X
-                y_lim: Begin and end of linear space of Y
-                z_lim: Begin and end of linear space of Z
-                xy_step: Step size between X and Y
-                z_step: Step size between Z and X
-                visualize: Visualize the 3D space
-            Returns:
-                cube_points: combination of X Y and Z
-            """
-        x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
-        y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
-        z_lin = np.arange(z_lim[0], z_lim[1], z_step)
-
-        mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
-
-        c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
-
-        if visualize:
-            self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
-
-        self.gcs3d_pts = c_points
-        self.z_scan_step = np.unique(c_points[:, 2]).shape[0]
-        self.uv_left = self.transform_gcs2ccs(cam_name='left')
-        self.uv_right = self.transform_gcs2ccs(cam_name='right')
-
-    # def points3d(self, x_lim, y_lim, z_lim, xy_step, delta, z_step, visualize=True):
+    # def points3d(self, x_lim=(-5, 5), y_lim=(-5, 5), z_lim=(0, 5), xy_step=1.0, z_step=1.0, visualize=False):
+    #     """
+    #         Create a 3D space of combination from linear arrays of X Y Z
+    #         Parameters:
+    #             x_lim: Begin and end of linear space of X
+    #             y_lim: Begin and end of linear space of Y
+    #             z_lim: Begin and end of linear space of Z
+    #             xy_step: Step size between X and Y
+    #             z_step: Step size between Z and X
+    #             visualize: Visualize the 3D space
+    #         Returns:
+    #             cube_points: combination of X Y and Z
+    #         """
     #     x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
     #     y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
     #     z_lin = np.arange(z_lim[0], z_lim[1], z_step)
     #
-    #     delta_x = np.array_split(x_lin, delta)
-    #     delta_y = np.array_split(y_lin, delta)
+    #     mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
     #
-    #     c_points = []
-    #     for x_part in delta_x:
-    #         for y_part in delta_y:
-    #             mg1, mg2, mg3 = np.meshgrid(x_part, y_part, z_lin, indexing='ij')
-    #             points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
-    #             c_points.append(points)
-    #
-    #
-    #     c_points = np.concatenate(c_points, axis=0)
+    #     c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
     #
     #     if visualize:
     #         self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
     #
-    #     return c_points
+    #     self.gcs3d_pts = c_points
+    #     self.z_scan_step = np.unique(c_points[:, 2]).shape[0]
+    #     self.uv_left = self.transform_gcs2ccs(cam_name='left')
+    #     self.uv_right = self.transform_gcs2ccs(cam_name='right')
+
+    def points3d(self, x_lim, y_lim, z_lim, xy_step, delta, z_step, visualize=True):
+        x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
+        y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
+        z_lin = np.arange(z_lim[0], z_lim[1], z_step)
+
+        delta_x = np.array_split(x_lin, delta)
+        delta_y = np.array_split(y_lin, delta)
+
+        all_points = []  # Lista temporária para armazenar os pontos em blocos
+
+        for i, x_part in enumerate(delta_x):
+            for j, y_part in enumerate(delta_y):
+                mg1, mg2, mg3 = np.meshgrid(x_part, y_part, z_lin, indexing='ij')
+                points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
+
+                if visualize:
+                    self.plot_3d_points(x=points[:, 0], y=points[:, 1], z=points[:, 2])
+
+                # Adiciona o bloco de pontos ao array final sem duplicação de memória
+                all_points.append(points)
+
+                # Libera a memória da região atual
+                del points
+                gc.collect()
+
+        # Concatena todos os blocos de pontos em um único array ao final
+        points_3d = np.concatenate(all_points, axis=0)
+
+        # Limpa a lista de blocos para liberar memória
+        del all_points
+        gc.collect()
+
+        return points_3d
 
     def plot_3d_points(self, x, y, z, color=None, title='Plot 3D of max correlation points'):
         """
@@ -436,7 +447,7 @@ class InverseTriangulation:
 
         return valid_uv & valid_std & phi_mask
 
-    def fringe_process(self,save_points=True, visualize=False):
+    def fringe_process(self,points_3d, save_points=True, visualize=False):
         """
         Zscan for stereo fringe process
         Parameters:
@@ -445,6 +456,11 @@ class InverseTriangulation:
         :return:
         """
         t0 = time.time()
+
+        self.gcs3d_pts = points_3d
+        self.z_scan_step = np.unique(points_3d[:, 2]).shape[0]
+        self.uv_left = self.transform_gcs2ccs(cam_name='left')
+        self.uv_right = self.transform_gcs2ccs(cam_name='right')
 
         inter_left, std_left = self.bi_interpolation(self.left_images, self.uv_left)
         inter_right, std_right = self.bi_interpolation(self.right_images, self.uv_right)

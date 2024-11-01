@@ -1,5 +1,4 @@
 import time
-
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
@@ -46,24 +45,23 @@ class inverse_triangulation():
         delta_x = np.array_split(x_lin, delta)
         delta_y = np.array_split(y_lin, delta)
 
-        # Lista para armazenar todos os pontos de todas as regiões
-        all_points = []
+        all_points = []  # Lista para armazenar os pontos
 
-        for x_part in delta_x:
-            for y_part in delta_y:
+        for i, x_part in enumerate(delta_x):
+            for j, y_part in enumerate(delta_y):
                 mg1, mg2, mg3 = np.meshgrid(x_part, y_part, z_lin, indexing='ij')
                 points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
 
-                # Adiciona os pontos da região à lista principal
+
                 all_points.append(points)
 
-        # Concatena todas as regiões em uma única nuvem de pontos
-        c_points = np.concatenate(all_points, axis=0)
+                if visualize:
+                    self.plot_3d_points(x=points[:, 0], y=points[:, 1], z=points[:, 2])
 
-        if visualize:
-            self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
+                del points  # Libera a memória
+                gc.collect()  # Coleta de lixo para liberar memória
 
-        return c_points
+        return np.concatenate(all_points, axis=0)  # Concatenar no final
 
     def plot_3d_points(self, x, y, z, color=None, title='Plot 3D of max correlation points'):
         """

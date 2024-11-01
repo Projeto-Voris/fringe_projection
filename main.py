@@ -102,16 +102,16 @@ def main():
 
         # zscan_1 = inverse_triangulation.inverse_triangulation()
         # # Acquired the points 3D
-        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=1.7, delta=5, z_step=1, visualize=False)
-        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
+        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=1.0, delta=10, z_step=0.05, visualize=False)
+        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=1.7, z_step=1, visualize=False)
         # # Interpolated the points and build the point cloud
         # zscan_1.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
 
         # Inverse Triangulation for Fringe projection
-        # zscan = InverseTriangulation(yaml_file)
-        # zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=1.7, z_step=1, visualize=False)
-        # zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right)
-        # z_zcan_points = zscan.fringe_process(save_points=False, visualize=True)
+        zscan = InverseTriangulation(yaml_file)
+        points_3d = zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200),delta=20, xy_step=1, z_step=1, visualize=False)
+        zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right)
+        z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=False, visualize=True)
 
 
 if __name__ == '__main__':
