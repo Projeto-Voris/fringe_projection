@@ -7,6 +7,8 @@ import os
 import time
 import gc
 from cupyx.fallback_mode import numpy
+from cupyx.fallback_mode.fallback import ndarray
+from scipy.constants import point
 
 
 class InverseTriangulation:
@@ -26,11 +28,11 @@ class InverseTriangulation:
         self.read_yaml_file()
 
         self.z_scan_step = None
-        self.gcs3d_pts = []
+        self.num_points = None
         self.max_gpu_usage = self.set_datalimit() // 3
 
-        self.uv_left = []
-        self.uv_right = []
+        # self.uv_left = []
+        # self.uv_right = []
 
     def read_images(self, left_imgs, right_imgs):
         if len(left_imgs) != len(right_imgs):
@@ -101,6 +103,26 @@ class InverseTriangulation:
 
         return points_3d
 
+    def points3D_arrays(self, x_lin: ndarray, y_lin: ndarray, z_lin: ndarray, visualize: bool = True) -> ndarray:
+        """
+        Crete 3D meshgrid of points based on input vectors of x, y and z
+        :param x_lin: linear space of x points
+        :param y_lin: linear space of y points
+        :param z_lin: linear space of z points
+        :param visualize: If true plot a 3d graph of points
+        :return: 3D meshgrid points size (N,3) where N = len(x)*len(y)*len(z)
+        """
+        mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
+        points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
+
+        if visualize:
+            self.plot_3d_points(x=points[:, 0], y=points[:, 1], z=points[:, 2])
+
+        self.num_points = points.shape[0]
+        self.z_scan_step = np.unique(points[:, 2]).shape[0]
+
+        return points
+
     def plot_3d_points(self, x, y, z, color=None, title='Plot 3D of max correlation points'):
         """
         Plot 3D points as scatter points where color is based on Z value
@@ -149,8 +171,8 @@ class InverseTriangulation:
         self.camera_params['right']['r'] = np.array(params['rot_matrix_right'], dtype=np.float64)
         self.camera_params['right']['t'] = np.array(params['t_right'], dtype=np.float64)
 
-        # self.camera_params['stereo']['R'] = np.array(params['R'], dtype=np.float64)
-        # self.camera_params['stereo']['T'] = np.array(params['T'], dtype=np.float64)
+        self.camera_params['stereo']['R'] = np.array(params['R'], dtype=np.float64)
+        self.camera_params['stereo']['T'] = np.array(params['T'], dtype=np.float64)
 
     def save_points(self, data, filename, delimiter=','):
         """
@@ -175,7 +197,7 @@ class InverseTriangulation:
         # Convert bytes to GB
         return total_memory / (1024 ** 3)
 
-    def transform_gcs2ccs(self, cam_name):
+    def transform_gcs2ccs(self, points_3d, cam_name):
         """
         Transform Global Coordinate System (xg, yg, zg)
          to Camera's Coordinate System (xc, yc, zc) and transform to Image's plane (uv)
@@ -183,19 +205,19 @@ class InverseTriangulation:
              uv_image_points: (2,N) reprojected points to image's plane
         """
         # Convert all inputs to CuPy arrays for GPU computation
-        xyz_gcs = cp.asarray(self.gcs3d_pts)
+        xyz_gcs = cp.asarray(points_3d)
         k = cp.asarray(self.camera_params[cam_name]['kk'])
         dist = cp.asarray(self.camera_params[cam_name]['kc'])
         rot = cp.asarray(self.camera_params[cam_name]['r'])
         tran = cp.asarray(self.camera_params[cam_name]['t'])
 
         # Estimate the size of the input and output arrays
-        num_points = xyz_gcs.shape[0]
+        # num_points = xyz_gcs.shape[0]
         bytes_per_float32 = 8  # Simulate double-precision float usage
 
         # Estimate the memory required per point for transformation and intermediate steps
         memory_per_point = (4 * 3 * bytes_per_float32) + (3 * bytes_per_float32)  # For xyz_gcs_1 and xyz_ccs
-        total_memory_required = num_points * memory_per_point
+        total_memory_required = self.num_points * memory_per_point
 
         # Adjust the batch size based on memory limitations
         if total_memory_required > self.max_gpu_usage * 1024 ** 3:
@@ -203,14 +225,14 @@ class InverseTriangulation:
                 (self.max_gpu_usage * 1024 ** 3 // memory_per_point) // 10)  # Reduce batch size more aggressively
             # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
         else:
-            points_per_batch = num_points  # Process all points at once
+            points_per_batch = self.num_points  # Process all points at once
 
         # Initialize an empty list to store results (on the CPU)
         uv_points_list = []
 
         # Process points in batches
-        for i in range(0, num_points, points_per_batch):
-            end = min(i + points_per_batch, num_points)
+        for i in range(0, self.num_points, points_per_batch):
+            end = min(i + points_per_batch, self.num_points)
             xyz_gcs_batch = xyz_gcs[i:end]
 
             # Debug: Check the shape of the batch
@@ -328,13 +350,12 @@ class InverseTriangulation:
             images = images[:, :, cp.newaxis]
 
         height, width, num_images = images.shape
-        num_points = uv_points.shape[1]
 
         # Estimate memory usage per point
         bytes_per_float32 = 8
         memory_per_point = (4 * num_images * bytes_per_float32)
         # For left_Igray, right_Igray, and intermediate calculations
-        total_memory_required = num_points * memory_per_point
+        total_memory_required = self.num_points * memory_per_point
 
         # Maximum bytes allowed for memory usage
 
@@ -343,17 +364,17 @@ class InverseTriangulation:
             points_per_batch = int(self.max_gpu_usage * 1024 ** 3 // memory_per_point // 100)
             # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
         else:
-            points_per_batch = num_points  # Process all points at once
+            points_per_batch = self.num_points  # Process all points at once
 
         # print(f"Batch size adjusted to: {batch_size} to fit within {max_memory_gb}GB GPU memory limit.")
 
         # Initialize output arrays on CPU to accumulate results
-        interpolated_cpu = np.empty((num_points, num_images), dtype=np.float16)
-        std_cpu = np.empty((num_points, num_images), dtype=np.float16)
+        interpolated_cpu = np.empty((self.num_points, num_images), dtype=np.float16)
+        std_cpu = np.empty((self.num_points, num_images), dtype=np.float16)
 
         # Process points in batches
-        for i in range(0, num_points, points_per_batch):
-            end = min(i + points_per_batch, num_points)
+        for i in range(0, self.num_points, points_per_batch):
+            end = min(i + points_per_batch, self.num_points)
             uv_batch = uv_points[:, i:end]
 
             x = uv_batch[0].astype(cp.int32)
@@ -409,7 +430,7 @@ class InverseTriangulation:
         """
         phi_map = []
         phi_min_id = []
-        for k in range(self.gcs3d_pts.shape[0] // self.z_scan_step):
+        for k in range(self.num_points // self.z_scan_step):
             diff_phi = np.abs(interp_left[self.z_scan_step * k:(k + 1) * self.z_scan_step]
                               - interp_right[self.z_scan_step * k:(k + 1) * self.z_scan_step])
             phi_min_id.append(np.argmin(diff_phi) + k * self.z_scan_step)
@@ -421,7 +442,7 @@ class InverseTriangulation:
             plt.show()
         return phi_min_id
 
-    def fringe_masks(self, std_l, std_r, phi_id, min_thresh=0, max_thresh=1):
+    def fringe_masks(self, std_l, std_r, phi_id, uv_left, uv_right, min_thresh=0, max_thresh=1):
         """
         Mask from fringe process to remove outbounds points.
         Paramenters:
@@ -433,12 +454,12 @@ class InverseTriangulation:
         Returns:
              valid_mask: Valid 3D points on image's plane
         """
-        valid_u_l = (self.uv_left[0, :] >= 0) & (self.uv_left[0, :] < self.left_images.shape[1])
-        valid_v_l = (self.uv_left[1, :] >= 0) & (self.uv_left[1, :] < self.left_images.shape[0])
-        valid_u_r = (self.uv_right[0, :] >= 0) & (self.uv_right[0, :] < self.right_images.shape[1])
-        valid_v_r = (self.uv_right[1, :] >= 0) & (self.uv_right[1, :] < self.right_images.shape[0])
+        valid_u_l = (uv_left[0, :] >= 0) & (uv_left[0, :] < self.left_images.shape[1])
+        valid_v_l = (uv_left[1, :] >= 0) & (uv_left[1, :] < self.left_images.shape[0])
+        valid_u_r = (uv_right[0, :] >= 0) & (uv_right[0, :] < self.right_images.shape[1])
+        valid_v_r = (uv_right[1, :] >= 0) & (uv_right[1, :] < self.right_images.shape[0])
         valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
-        phi_mask = np.zeros(self.uv_left.shape[1], dtype=bool)
+        phi_mask = np.zeros(uv_left.shape[1], dtype=bool)
         phi_mask[phi_id] = True
         valid_l = (min_thresh < std_l) & (std_l < max_thresh)
         valid_r = (min_thresh < std_r) & (std_r < max_thresh)
@@ -447,26 +468,23 @@ class InverseTriangulation:
 
         return valid_uv & valid_std & phi_mask
 
-    def fringe_process(self,points_3d, save_points=True, visualize=False):
+    def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
         """
         Zscan for stereo fringe process
         Parameters:
             save_points: boolean to save or not image
             visualize: boolean to visualize result
         :return:
+            measured_pts: Valid 3D global coordinate points
         """
         t0 = time.time()
-
-        self.gcs3d_pts = points_3d
-        self.z_scan_step = np.unique(points_3d[:, 2]).shape[0]
-        self.uv_left = self.transform_gcs2ccs(cam_name='left')
-        self.uv_right = self.transform_gcs2ccs(cam_name='right')
-
-        inter_left, std_left = self.bi_interpolation(self.left_images, self.uv_left)
-        inter_right, std_right = self.bi_interpolation(self.right_images, self.uv_right)
+        uv_left = self.transform_gcs2ccs(points_3d, cam_name='left')
+        uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
+        inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
+        inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
 
         phi_min_id = self.phase_map(inter_left, inter_right)
-        measured_pts = self.gcs3d_pts[self.fringe_masks(std_left, std_right, phi_min_id)]
+        measured_pts = points_3d[np.asarray(phi_min_id, np.int32)]
 
         print('Zscan result dt: {} s'.format(round(time.time() - t0), 2))
 
@@ -498,31 +516,31 @@ class InverseTriangulation:
         num_points = left_Igray.shape[0]  # Number of points
 
         # Number of tested Z (this will be used as batch size)
-        num_pairs = self.gcs3d_pts.shape[0] // self.z_scan_step  # Total number of XY points
+        num_pairs = self.num_points // self.z_scan_step  # Total number of XY points
 
         # Estimate memory usage per point
         bytes_per_float32 = 8
         memory_per_point = (4 * num_images * bytes_per_float32)
         # For left_Igray, right_Igray, and intermediate calculations
-        total_memory_required = num_points * memory_per_point
+        total_memory_required = self.num_points * memory_per_point
 
         # Adjust the batch size based on memory limitations
         if total_memory_required > self.max_gpu_usage * 1024 ** 3:
             points_per_batch = int(self.max_gpu_usage * 1024 ** 3 // memory_per_point // 10)
             # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
         else:
-            points_per_batch = num_points  # Process all points at once
+            points_per_batch = self.num_points  # Process all points at once
 
         # Initialize outputs with the correct data type (float32 for memory efficiency)
-        ho = cp.empty(num_points, dtype=cp.float32)
+        ho = cp.empty(self.num_points, dtype=cp.float32)
 
         # Preallocate ho_ztep only if necessary
         ho_ztep = cp.empty((self.z_scan_step, num_pairs),
                            dtype=cp.float32)  # Store values for each Z value tested per XY pair
 
         # Process images in chunks based on the adjusted points_per_batch size
-        for i in range(0, num_points, points_per_batch):
-            end = min(i + points_per_batch, num_points)
+        for i in range(0, self.num_points, points_per_batch):
+            end = min(i + points_per_batch, self.num_points)
 
             # Load only the current batch into the GPU
             batch_left = cp.asarray(left_Igray[i:end], dtype=cp.float32)
@@ -554,7 +572,7 @@ class InverseTriangulation:
         hmax = cp.empty(num_pairs, dtype=cp.float32)
         Imax = cp.empty(num_pairs, dtype=cp.int64)
         # Calculate hmax and Imax for this batch
-        for k in range(self.gcs3d_pts.shape[0] // self.z_scan_step):
+        for k in range(self.num_points // self.z_scan_step):
             start_idx = k * self.z_scan_step
             end_idx = (k + 1) * self.z_scan_step
             ho_range = ho[start_idx:end_idx]
@@ -564,7 +582,7 @@ class InverseTriangulation:
 
         return cp.asnumpy(ho), cp.asnumpy(hmax), cp.asnumpy(Imax), cp.asnumpy(ho_ztep)
 
-    def spatial_correl(self, window_size=3):
+    def spatial_correl(self, uv_left, uv_right, window_size=3):
         """
         Vectorized computation of spatial correlation for patches around specified points across all images at once.
 
@@ -583,17 +601,17 @@ class InverseTriangulation:
         if window_size <= 5:
             half_window = window_size // 2
             height, width, num_images = self.left_images.shape
-            num_points = self.uv_left.shape[1]
+            # num_points = self.uv_left.shape[1]
 
             # Allocate space for the result
-            spatial_corr = np.zeros(num_points, dtype=np.float32)
+            spatial_corr = np.zeros(self.num_points, dtype=np.float32)
 
             # Vectorized window bounds for left and right points
-            x1_l = np.clip(self.uv_left[0] - half_window, 0, width - window_size).astype(np.int32)
-            y1_l = np.clip(self.uv_left[1] - half_window, 0, height - window_size).astype(np.int32)
+            x1_l = np.clip(uv_left[0] - half_window, 0, width - window_size).astype(np.int32)
+            y1_l = np.clip(uv_left[1] - half_window, 0, height - window_size).astype(np.int32)
 
-            x1_r = np.clip(self.uv_right[0] - half_window, 0, width - window_size).astype(np.int32)
-            y1_r = np.clip(self.uv_right[1] - half_window, 0, height - window_size).astype(np.int32)
+            x1_r = np.clip(uv_right[0] - half_window, 0, width - window_size).astype(np.int32)
+            y1_r = np.clip(uv_right[1] - half_window, 0, height - window_size).astype(np.int32)
 
             # Constructing indices for batch-based patch extraction
             # Left patches: Shape (batch_size, window_size, window_size, num_images)
@@ -622,10 +640,10 @@ class InverseTriangulation:
 
             # Final spatial correlation for all points
             spatial_corr = num_total / (den_total + 1e-10)  # Avoid division by zero
-            spatial_max = np.empty(self.gcs3d_pts.shape[0] // self.z_scan_step, dtype=np.float32)
-            spatial_id = np.empty(self.gcs3d_pts.shape[0] // self.z_scan_step, dtype=np.int32)
+            spatial_max = np.empty(self.num_points // self.z_scan_step, dtype=np.float32)
+            spatial_id = np.empty(self.num_points // self.z_scan_step, dtype=np.int32)
 
-            for k in range(self.gcs3d_pts.shape[0] // self.z_scan_step):
+            for k in range(self.num_points // self.z_scan_step):
                 spatial_range = spatial_corr[k * self.z_scan_step:(k + 1) * self.z_scan_step]
                 spatial_max[k] = np.nanmax(spatial_range)
                 spatial_id[k] = np.nanargmax(spatial_range) + k * self.z_scan_step
@@ -634,24 +652,24 @@ class InverseTriangulation:
         if window_size > 5:
             half_window = window_size // 2
             height, width, num_images = self.left_images.shape
-            num_points = self.uv_left.shape[1]
+            num_points = uv_left.shape[1]
 
             # Estimate memory usage per point
             bytes_per_float32 = 4
             memory_per_point = (
                     2 * window_size * window_size * num_images * bytes_per_float32)  # For left and right patches
-            total_memory_required = num_points * memory_per_point
+            total_memory_required = self.num_points * memory_per_point
 
             # Adjust the batch size based on memory limitations
             points_per_batch = max(1, int(self.max_gpu_usage * 1024 ** 3 // memory_per_point))
 
             # Allocate space for the result on GPU
-            spatial_corr = cp.zeros(num_points, dtype=cp.float32)
+            spatial_corr = cp.zeros(self.num_points, dtype=cp.float32)
 
-            for i in range(0, num_points, points_per_batch):
-                end_idx = min(i + points_per_batch, num_points)
-                uv_batch_l = cp.asarray(self.uv_left[:, i:end_idx])
-                uv_batch_r = cp.asarray(self.uv_right[:, i:end_idx])
+            for i in range(0, self.num_points, points_per_batch):
+                end_idx = min(i + points_per_batch, self.num_points)
+                uv_batch_l = cp.asarray(uv_left[:, i:end_idx])
+                uv_batch_r = cp.asarray(uv_right[:, i:end_idx])
 
                 # Vectorized window bounds for left and right points
                 x1_l = cp.clip(uv_batch_l[0] - half_window, 0, width - window_size).astype(cp.int32)
@@ -716,16 +734,16 @@ class InverseTriangulation:
         # Combine the correlations using a weighted sum
         fused_corr = alpha * spatial_corr_norm + beta * temporal_corr_norm  # Reshape for broadcasting
 
-        correl_max = np.empty((self.gcs3d_pts.shape[0] // self.z_scan_step), dtype=np.float32)
-        correl_id = np.empty((self.gcs3d_pts.shape[0] // self.z_scan_step), dtype=np.float32)
-        for k in range(self.gcs3d_pts.shape[0] // self.z_scan_step):
+        correl_max = np.empty((self.num_points // self.z_scan_step), dtype=np.float32)
+        correl_id = np.empty((self.num_points // self.z_scan_step), dtype=np.float32)
+        for k in range(self.num_points // self.z_scan_step):
             correl_range = fused_corr[k * self.z_scan_step:(k + 1) * self.z_scan_step]
             correl_max[k] = np.nanmax(correl_range)
             correl_id[k] = np.nanargmax(correl_range) + k * self.z_scan_step
 
         return fused_corr, correl_max, correl_id
 
-    def correl_mask(self, std_l, std_r, hmax, min_thresh=0, max_thresh=1):
+    def correl_mask(self, std_l, std_r, hmax, uv_left, uv_right, min_thresh=0, max_thresh=1):
         """
         Mask from correlation process to remove outbounds points.
         Paramenters:
@@ -737,13 +755,13 @@ class InverseTriangulation:
         Returns:
              valid_mask: Valid 3D points on image's plane
         """
-        valid_u_l = (self.uv_left[0, :] >= 0) & (self.uv_left[0, :] < self.left_images.shape[1])
-        valid_v_l = (self.uv_left[1, :] >= 0) & (self.uv_left[1, :] < self.left_images.shape[0])
-        valid_u_r = (self.uv_right[0, :] >= 0) & (self.uv_right[0, :] < self.right_images.shape[1])
-        valid_v_r = (self.uv_right[1, :] >= 0) & (self.uv_right[1, :] < self.right_images.shape[0])
+        valid_u_l = (uv_left[0, :] >= 0) & (uv_left[0, :] < self.left_images.shape[1])
+        valid_v_l = (uv_left[1, :] >= 0) & (uv_left[1, :] < self.left_images.shape[0])
+        valid_u_r = (uv_right[0, :] >= 0) & (uv_right[0, :] < self.right_images.shape[1])
+        valid_v_r = (uv_right[1, :] >= 0) & (uv_right[1, :] < self.right_images.shape[0])
         valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
 
-        ho_mask = np.zeros(self.uv_left.shape[1], dtype=bool)
+        ho_mask = np.zeros(uv_left.shape[1], dtype=bool)
         ho_mask[np.asarray(hmax > 0.95, np.int32)] = True
         if len(std_l.shape) > 1 or len(std_r.shape) > 1:
             std_l = np.std(std_l, axis=1)
@@ -756,7 +774,7 @@ class InverseTriangulation:
 
         return valid_uv & valid_std & ho_mask
 
-    def correlation_process(self, win_size=3, correl_param=(0.3, 0.7), save_points=True, visualize=False):
+    def correlation_process(self, points_3d, win_size=3, correl_param=(0.3, 0.7), save_points=True, visualize=False):
         """
         Zscan process of temporal and spatial correlations.
         Parameters:
@@ -768,17 +786,20 @@ class InverseTriangulation:
             correl_points: (X*Y, 3) list from bests correlation points.
         """
         t0 = time.time()
+        uv_left = self.transform_gcs2ccs(points_3d=points_3d, cam_name='left')
+        uv_right = self.transform_gcs2ccs(points_3d=points_3d, cam_name='right')
 
-        inter_left, std_left = self.bi_interpolation(self.left_images, self.uv_left)
-        inter_right, std_right = self.bi_interpolation(self.right_images, self.uv_right)
+        inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
+        inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
 
-        spatial_corr, spatial_max, spatial_id = self.spatial_correl(window_size=win_size)
+        spatial_corr, spatial_max, spatial_id = self.spatial_correl(window_size=win_size, uv_left=uv_left,
+                                                                    uv_right=uv_right)
         ho, hmax, imax, ho_zstep = self.temp_cross_correlation(left_Igray=inter_left, right_Igray=inter_right)
 
         fused_corr, fused_max, fused_id = self.fuse_correlations(spatial_corr=spatial_corr, temporal_corr=ho,
                                                                  alpha=correl_param[0], beta=correl_param[1])
-        # correl_points = self.gcs3d_pts[self.correl_mask(std_left, std_right, fused_max)]
-        correl_points = self.gcs3d_pts[np.asarray(fused_id[fused_max > 0.95]).astype(np.int32)]
+        # correl_points = points_3d[self.correl_mask(std_left, std_right, fused_max)]
+        correl_points = points_3d[np.asarray(fused_id[fused_max > 0.95]).astype(np.int32)]
 
         print('Time to process correlation: {} s'.format(round(time.time() - t0), 2))
 
