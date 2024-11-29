@@ -3,11 +3,11 @@ import cv2
 import screeninfo
 import PySpin
 import numpy as np
-
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
 import inverse_triangulation
 from include.InverseTriangulation import InverseTriangulation
+import test_mask
 
 
 def main():
@@ -19,8 +19,8 @@ def main():
     img_resolution = (width, height)
     pixel_per_fringe = 32
     steps = 8
-    path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe,
-                                                                                                 steps)
+    # path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
+    path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
 
     stereo_ctrl = StereoCameraController(left_serial=16378750, right_serial=16378734)
@@ -41,7 +41,7 @@ def main():
     k = 0
 
     try:
-        stereo_ctrl.set_exposure_time(16666.0)
+        stereo_ctrl.set_exposure_time(1666.0)
         stereo_ctrl.set_exposure_mode(PySpin.ExposureAuto_Off)
         stereo_ctrl.set_gain(0)
         stereo_ctrl.set_image_format(PySpin.PixelFormat_Mono8)
@@ -96,16 +96,17 @@ def main():
         #     stereo.calculate_abs_phi_images(visualize=False)
 
         # Acquired the abs images
+        gray_img = stereo.images_left[:, :, 8]
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
-        # read the yaml_file
-        yaml_file = '/home/daniel/PycharmProjects/fringe_projection/params/20241018_bouget.yaml'
+        _, binary_img = cv2.threshold(gray_img, 10, 255, cv2.THRESH_BINARY)
 
-        # zscan_1 = inverse_triangulation.inverse_triangulation()
-        # Acquired the points 3D
-        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=1.0, delta=10, z_step=0.05, visualize=False)
-        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=1.7, z_step=1, visualize=False)
-        # Interpolated the points and build the point cloud
-        # zscan_1.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
+        abs_phi_image_left_mask = np.where(binary_img, abs_phi_image_left, 0)
+        abs_phi_image_right_mask = np.where(binary_img, abs_phi_image_right, 0)
+
+        # read the yaml_file
+        # yaml_file = '/home/daniel/PycharmProjects/fringe_projection/params/20241018_bouget.yaml'
+        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241129_bouget_luan_2.yaml'
+
 
         # Inverse Triangulation for Fringe projection
         zscan = InverseTriangulation(yaml_file)
@@ -121,18 +122,15 @@ def main():
         for x_arr in x_split:
             for y_arr in y_split:
                 points_3d = zscan.points3D_arrays(x_arr, y_arr, z_lin, visualize=False)
-                zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right)
+                zscan.read_images(left_imgs=abs_phi_image_left_mask, right_imgs=abs_phi_image_right_mask)
                 z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=False, visualize=False)
                 points_result.append(z_zcan_points)
                 count += 1
                 print(count)
 
-
         points_result_ar = np.concatenate(points_result, axis=0)
         zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
         print('wait')
-
-
 
 if __name__ == '__main__':
     main()
