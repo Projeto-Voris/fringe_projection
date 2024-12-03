@@ -3,11 +3,11 @@ import cv2
 import screeninfo
 import PySpin
 import numpy as np
+import open3d as o3d
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
-import inverse_triangulation
 from include.InverseTriangulation import InverseTriangulation
-import test_mask
+import octree_process
 
 
 def main():
@@ -129,7 +129,10 @@ def main():
                 print(count)
 
         points_result_ar = np.concatenate(points_result, axis=0)
-        zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
+        points_result_ar_filtered = octree_process.filter_points_by_depth(points_result_ar, depth_threshold=0.001)
+        points_result_ar_filtered = np.asarray(points_result_ar_filtered.points)
+        # zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
+        zscan.plot_3d_points(points_result_ar_filtered[:,0], points_result_ar_filtered[:,1], points_result_ar_filtered[:,2], color=None, title='Filtered Points')
         print('wait')
 
 if __name__ == '__main__':
