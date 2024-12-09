@@ -1,7 +1,12 @@
 import numpy as np
 import open3d as o3d
+import cupy as cp
 
 def filter_points_by_depth(points, depth_threshold=0.05):
+    # Se 'points' for um array Cupy
+    if isinstance(points, cp.ndarray):
+        points = points.get()  # Converte para NumPy
+
     # Converte o numpy array para um objeto PointCloud do Open3D
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)

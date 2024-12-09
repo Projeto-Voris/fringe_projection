@@ -144,10 +144,13 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         # Calcular Phi para cada pixel
         phi_image = np.arctan2(-sin_contributions, cos_contributions)
 
+        # Calcular o mapa de modulação (contraste das franjas)
+        modulation_map = np.sqrt(sin_contributions ** 2 + cos_contributions ** 2)
+
         if visualize:
-            phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
+            modulation_map_left, phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
                                                 visualize=False)
-            phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
+            modulation_map_right,phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
                                                  visualize=False)
 
             qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):], visualize=False)
@@ -175,7 +178,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
             plt.tight_layout()
             plt.show()
 
-        return phi_image
+        return modulation_map, phi_image
 
     def calculate_qsi(self, graycode_image, name='Plot', visualize=True):
         """
@@ -293,9 +296,9 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                 `phi_image_right`. Os valores da fase estão em radianos.
         """
         t0 = time.time()
-        phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
+        _, phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
                                             visualize=False)
-        phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
+        _, phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
                                              visualize=False)
 
         qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):], visualize=False)
@@ -367,6 +370,47 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
             plt.show()
         print('Process abs phase: {} dt'.format(round(time.time() - t0, 2)))
         return abs_phi_image_left_remaped, abs_phi_image_right_remaped
+
+    def filter_absolute_phase(self, img_l, img_r, modulation_threshold=0.1, visualize=True):
+        """
+        Filtra a fase absoluta com base no mapa de modulação.
+
+        Parâmetros:
+            modulation_map (numpy.ndarray): Mapa de modulação
+            modulation_threshold (float): Limite mínimo de modulação.
+
+        Retorna:
+            numpy.ndarray: Fase absoluta filtrada.
+        """
+        modulation_map_l, _ = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))], visualize=False)
+        modulation_map_r, _ = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))], visualize=False)
+
+        # Criar máscara com base no mapa de modulação, excluindo valores de modulação saturados
+        valid_mask_l = (modulation_map_l >= modulation_threshold) & (modulation_map_l != 0) & (modulation_map_l != 256)
+        valid_mask_r = (modulation_map_r >= modulation_threshold) & (modulation_map_r != 0) & (modulation_map_r != 256)
+
+        filtered_phi_abs_l = np.full_like(img_l, np.nan)
+        filtered_phi_abs_l[valid_mask_l] = img_l[valid_mask_l]
+
+        filtered_phi_abs_r = np.full_like(img_r, np.nan)
+        filtered_phi_abs_r[valid_mask_r] = img_r[valid_mask_r]
+
+        if visualize:
+            # Visualizar fase absoluta filtrada
+            fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+            im_left = axes[0].imshow(filtered_phi_abs_l, cmap='gray')
+            axes[0].set_title('Fase Absoluta Filtrada (Left)')
+            fig.colorbar(im_left, ax=axes[0], label='Fase (rad)')
+
+            im_right = axes[1].imshow(filtered_phi_abs_r, cmap='gray')
+            axes[1].set_title('Fase Absoluta Filtrada (Right)')
+            fig.colorbar(im_right, ax=axes[1], label='Fase (rad)')
+
+            plt.tight_layout()
+            plt.show()
+
+        return filtered_phi_abs_l, filtered_phi_abs_r
 
     def plot_1d_phase(self, ax, phi_image, remaped_qsi_image, title, ylabel):
         """
