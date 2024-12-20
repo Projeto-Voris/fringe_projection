@@ -12,7 +12,7 @@ def filter_points_by_depth(points, depth_threshold=0.05):
     pcd.points = o3d.utility.Vector3dVector(points)
 
     # Cria a octree com base na profundidade, qunado maior mais divisão
-    octree = o3d.geometry.Octree(max_depth=2)
+    octree = o3d.geometry.Octree(max_depth=20)
     octree.convert_from_point_cloud(pcd, size_expand=0.01)
 
     filtered_points = []

@@ -75,38 +75,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         self.images_left[:, :, counter] = image_left
         self.images_right[:, :, counter] = image_right
 
-    def apply_mask_otsu_threshold(self, image):
-        """
-            Aplica Otsu thresholding a cada uma das camadas de uma imagem de múltiplos canais (franjas)
-            e gera uma máscara para separar franjas do fundo.
-            Parameters:
-            -----------
-            image : np.ndarray
-                A imagem com múltiplos canais, onde cada canal é uma imagem com franjas mudando de fase.
-            max_value : int
-                Valor máximo a ser atribuído aos pixels acima do limiar (geralmente 255).
-            Returns:
-            --------
-            mask : np.ndarray
-                A máscara binária resultante após aplicar Otsu thresholding.
-        """
-        # Inicializa a máscara com zeros
-        mask = np.zeros(image.shape[:2], dtype=np.uint8)
-
-        # Aplicar Otsu thresholding a cada camada individualmente
-        for i in range(image.shape[2]):
-            gray_image = image[:, :, i]
-            _, thresh = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            mask = np.maximum(mask, thresh)  # Combinar os thresholdings das camadas para criar a máscara
-
-        # Expandir a máscara para o número de canais da imagem original
-        mask_expanded = np.stack([mask] * image.shape[2], axis=-1)
-
-        # Aplicar a máscara à imagem original
-        masked_image = cv2.bitwise_and(image, image, mask=mask_expanded[:, :, 0])  # Usar apenas a 1ª camada da máscara
-
-        return masked_image
-
     def calculate_phi(self, image, name='Plot', visualize=True):
         """
             Calcula a imagem de fase (phi) a partir de uma imagem de múltiplos canais utilizando transformações senoidais e cossenoidais.
@@ -129,22 +97,19 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                 ao ângulo Phi calculado para aquele pixel com base nas contribuições de seno e cosseno dos canais.
         """
 
-        # Aplicar a máscara com o otsu threshold
-        masked_image = self.apply_mask_otsu_threshold(image)
-
-        indices = np.arange(1, masked_image.shape[2] + 1)
-        angle = 2 * np.pi * indices / masked_image.shape[2]
+        indices = np.arange(1, image.shape[2] + 1)
+        angle = 2 * np.pi * indices / image.shape[2]
 
         sin_values = np.sin(angle)
         cos_values = np.cos(angle)
 
-        sin_contributions = np.sum(masked_image * sin_values, axis=2)
-        cos_contributions = np.sum(masked_image * cos_values, axis=2)
+        sin_contributions = np.sum(image * sin_values, axis=2)
+        cos_contributions = np.sum(image * cos_values, axis=2)
 
         # Calcular Phi para cada pixel
         phi_image = np.arctan2(-sin_contributions, cos_contributions)
 
-        # Calcular o mapa de modulação (contraste das franjas)
+        # Calcular o mapa de modulação
         modulation_map = np.sqrt(sin_contributions ** 2 + cos_contributions ** 2)
 
         if visualize:
@@ -296,9 +261,9 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                 `phi_image_right`. Os valores da fase estão em radianos.
         """
         t0 = time.time()
-        _, phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
+        modulation_map_l, phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
                                             visualize=False)
-        _, phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
+        modulation_map_r, phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
                                              visualize=False)
 
         qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):], visualize=False)
@@ -370,47 +335,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
             plt.show()
         print('Process abs phase: {} dt'.format(round(time.time() - t0, 2)))
         return abs_phi_image_left_remaped, abs_phi_image_right_remaped
-
-    def filter_absolute_phase(self, img_l, img_r, modulation_threshold=0.1, visualize=True):
-        """
-        Filtra a fase absoluta com base no mapa de modulação.
-
-        Parâmetros:
-            modulation_map (numpy.ndarray): Mapa de modulação
-            modulation_threshold (float): Limite mínimo de modulação.
-
-        Retorna:
-            numpy.ndarray: Fase absoluta filtrada.
-        """
-        modulation_map_l, _ = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))], visualize=False)
-        modulation_map_r, _ = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))], visualize=False)
-
-        # Criar máscara com base no mapa de modulação, excluindo valores de modulação saturados
-        valid_mask_l = (modulation_map_l >= modulation_threshold) & (modulation_map_l != 0) & (modulation_map_l != 256)
-        valid_mask_r = (modulation_map_r >= modulation_threshold) & (modulation_map_r != 0) & (modulation_map_r != 256)
-
-        filtered_phi_abs_l = np.full_like(img_l, np.nan)
-        filtered_phi_abs_l[valid_mask_l] = img_l[valid_mask_l]
-
-        filtered_phi_abs_r = np.full_like(img_r, np.nan)
-        filtered_phi_abs_r[valid_mask_r] = img_r[valid_mask_r]
-
-        if visualize:
-            # Visualizar fase absoluta filtrada
-            fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-
-            im_left = axes[0].imshow(filtered_phi_abs_l, cmap='gray')
-            axes[0].set_title('Fase Absoluta Filtrada (Left)')
-            fig.colorbar(im_left, ax=axes[0], label='Fase (rad)')
-
-            im_right = axes[1].imshow(filtered_phi_abs_r, cmap='gray')
-            axes[1].set_title('Fase Absoluta Filtrada (Right)')
-            fig.colorbar(im_right, ax=axes[1], label='Fase (rad)')
-
-            plt.tight_layout()
-            plt.show()
-
-        return filtered_phi_abs_l, filtered_phi_abs_r
 
     def plot_1d_phase(self, ax, phi_image, remaped_qsi_image, title, ylabel):
         """

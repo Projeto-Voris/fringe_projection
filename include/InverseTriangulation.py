@@ -12,6 +12,8 @@ class InverseTriangulation:
         self.yaml_file = yaml_file
         self.left_images = ndarray([])
         self.right_images = ndarray([])
+        self.left_mask = ndarray([])
+        self.right_mask = ndarray([])
 
         # Initialize all camera parameters in a single nested dictionary
         self.camera_params = {
@@ -29,40 +31,42 @@ class InverseTriangulation:
         # self.uv_left = []
         # self.uv_right = []
 
-    def read_images(self, left_imgs, right_imgs):
+    def read_images(self, left_imgs, right_imgs, left_mask, right_mask):
         if len(left_imgs) != len(right_imgs):
             raise Exception("Number of images do not match")
         self.left_images = cp.asarray(left_imgs)
         self.right_images = cp.asarray(right_imgs)
+        self.left_mask = cp.asarray(left_mask)
+        self.right_mask = cp.asarray(right_mask)
 
-    def points3d(self, x_lim=(-5, 5), y_lim=(-5, 5), z_lim=(0, 5), xy_step=1.0, z_step=1.0, visualize=False):
-        """
-            Create a 3D space of combination from linear arrays of X Y Z
-            Parameters:
-                x_lim: Begin and end of linear space of X
-                y_lim: Begin and end of linear space of Y
-                z_lim: Begin and end of linear space of Z
-                xy_step: Step size between X and Y
-                z_step: Step size between Z and X
-                visualize: Visualize the 3D space
-            Returns:
-                cube_points: combination of X Y and Z
-            """
-        x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
-        y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
-        z_lin = np.arange(z_lim[0], z_lim[1], z_step)
-
-        mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
-
-        c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
-
-        if visualize:
-            self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
-
-        self.num_points = c_points.shape[0]
-        self.z_scan_step = np.unique(c_points[:, 2]).shape[0]
-
-        return c_points.astype(np.float16)
+    # def points3d(self, x_lim=(-5, 5), y_lim=(-5, 5), z_lim=(0, 5), xy_step=1.0, z_step=1.0, visualize=False):
+    #     """
+    #         Create a 3D space of combination from linear arrays of X Y Z
+    #         Parameters:
+    #             x_lim: Begin and end of linear space of X
+    #             y_lim: Begin and end of linear space of Y
+    #             z_lim: Begin and end of linear space of Z
+    #             xy_step: Step size between X and Y
+    #             z_step: Step size between Z and X
+    #             visualize: Visualize the 3D space
+    #         Returns:
+    #             cube_points: combination of X Y and Z
+    #         """
+    #     x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
+    #     y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
+    #     z_lin = np.arange(z_lim[0], z_lim[1], z_step)
+    #
+    #     mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
+    #
+    #     c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
+    #
+    #     if visualize:
+    #         self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
+    #
+    #     self.num_points = c_points.shape[0]
+    #     self.z_scan_step = np.unique(c_points[:, 2]).shape[0]
+    #
+    #     return c_points.astype(np.float16)
 
     def points3d_zstep(self, x_lim=(-5, 5), y_lim=(-5, 5), xy_step=1.0, z_lin=np.arange(0, 100, 0.1), visualize=False):
         """
@@ -120,6 +124,10 @@ class InverseTriangulation:
             z: array of z positions
             color: Vector of point intensity grayscale
         """
+        x = x.get()
+        y = y.get()
+        z = z.get()
+
         if color is None:
             color = z
         cmap = 'viridis'
@@ -268,13 +276,13 @@ class InverseTriangulation:
         # Ensure consistent dimensions when concatenating batches
         try:
             # Concatenate all batches along axis 0 (rows)
-            uv_points = np.hstack(uv_points_list)  # Use np.hstack for matching shapes
+            uv_points = cp.hstack(uv_points_list)  # Use np.hstack for matching shapes
 
         except ValueError as e:
             print(f"Error during concatenation: {e}")
             raise
 
-        return uv_points[:2, :].astype(np.float16)
+        return uv_points[:2, :].astype(cp.float16)
 
     def undistorted_points(self, points, dist):
         """
@@ -423,7 +431,7 @@ class InverseTriangulation:
             plt.show()
         return phi_min_id
 
-    def fringe_masks(self, std_l, std_r, phi_id, uv_left, uv_right, min_thresh=0, max_thresh=1):
+    def fringe_masks(self, uv_l, uv_r, std_l, std_r, phi_id, min_thresh=-0.01, max_thresh=1.01):
         """
         Mask from fringe process to remove outbounds points.
         Paramenters:
@@ -435,19 +443,43 @@ class InverseTriangulation:
         Returns:
              valid_mask: Valid 3D points on image's plane
         """
-        valid_u_l = (uv_left[0, :] >= 0) & (uv_left[0, :] < self.left_images.shape[1])
-        valid_v_l = (uv_left[1, :] >= 0) & (uv_left[1, :] < self.left_images.shape[0])
-        valid_u_r = (uv_right[0, :] >= 0) & (uv_right[0, :] < self.right_images.shape[1])
-        valid_v_r = (uv_right[1, :] >= 0) & (uv_right[1, :] < self.right_images.shape[0])
-        valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
-        phi_mask = np.zeros(uv_left.shape[1], dtype=bool)
+        # Verifica se as coordenadas estão dentro dos limites das máscaras
+        valid_u_l = (uv_l[0, :] >= 0) & (uv_l[0, :] < self.left_images.shape[1])
+        valid_v_l = (uv_l[1, :] >= 0) & (uv_l[1, :] < self.left_images.shape[0])
+        valid_u_r = (uv_r[0, :] >= 0) & (uv_r[0, :] < self.right_images.shape[1])
+        valid_v_r = (uv_r[1, :] >= 0) & (uv_r[1, :] < self.right_images.shape[0])
+
+        # Aplica as verificações de validade nas coordenadas UV para evitar indexação fora do limite
+        valid_uv_l = valid_u_l & valid_v_l
+        valid_uv_r = valid_u_r & valid_v_r
+
+        # Verifica os pontos válidos nas máscaras (aplica as coordenadas para obter as máscaras)
+        valid_uv_l &= (self.left_images[uv_l[1, :].clip(0, self.left_images.shape[0] - 1).astype(int),
+                uv_l[0, :].clip(0, self.left_images.shape[1] - 1).astype(int)] > 0)
+
+        valid_uv_r &= (self.right_images[uv_r[1, :].clip(0, self.right_images.shape[0] - 1).astype(int),
+                uv_r[0, :].clip(0, self.right_images.shape[1] - 1).astype(int)] > 0)
+
+        # Combine as verificações dos limites
+        valid_uv = valid_uv_r & valid_uv_l
+
+        # Máscara para `phi_id`
+        phi_mask = cp.zeros(uv_l.shape[1], dtype=bool)
         phi_mask[phi_id] = True
+
+        # Verificação dos thresholds de `std` para pontos válidos
         valid_l = (min_thresh < std_l) & (std_l < max_thresh)
         valid_r = (min_thresh < std_r) & (std_r < max_thresh)
-
         valid_std = valid_r & valid_l
+        valid_std = valid_std[:, 0]
 
-        return valid_uv & valid_std & phi_mask
+        # Retorne a máscara final considerando os pontos válidos em `uv`, `phi` e `std`
+        mask = valid_uv & phi_mask & valid_std
+        # print("Shape valid_uv:", valid_uv.shape)
+        # print("Shape phi_mask:", phi_mask.shape)
+        # print("Shape valid_std:", valid_std.shape)
+        # print("Final mask points:", np.sum(mask))
+        return mask
 
     def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
         """
@@ -465,7 +497,8 @@ class InverseTriangulation:
         inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
 
         phi_min_id = self.phase_map(inter_left, inter_right)
-        measured_pts = points_3d[cp.asarray(phi_min_id, cp.int32)]
+        fringe_mask = self.fringe_masks(uv_l = uv_left, uv_r = uv_right, std_l = std_left, std_r = std_right, phi_id = phi_min_id)
+        measured_pts = points_3d[cp.asarray(fringe_mask, cp.int32)]
 
         print('Zscan result dt: {} s'.format(round(time.time() - t0), 2))
 
@@ -478,301 +511,57 @@ class InverseTriangulation:
 
         return measured_pts
 
-    def temp_cross_correlation(self, left_Igray, right_Igray):
-        """
-        Calculate the cross-correlation between two sets of images over time using CuPy for GPU acceleration,
-        while limiting GPU memory usage and handling variable batch sizes.
-
-        Parameters:
-        left_Igray: (num_points, num_images) array of left images in grayscale.
-        right_Igray: (num_points, num_images) array of right images in grayscale.
-        Returns:
-        ho: Cross-correlation values.
-        hmax: Maximum correlation values.
-        Imax: Indices of maximum correlation values.
-        ho_ztep: List of correlation values for all Z value of each XY.
-        """
-
-        num_images = left_Igray.shape[1]  # Number of images
-        num_points = left_Igray.shape[0]  # Number of points
-
-        # Number of tested Z (this will be used as batch size)
-        num_pairs = self.num_points // self.z_scan_step  # Total number of XY points
-
-        # Estimate memory usage per point
-        bytes_per_float32 = 8
-        memory_per_point = (4 * num_images * bytes_per_float32)
-        # For left_Igray, right_Igray, and intermediate calculations
-        total_memory_required = self.num_points * memory_per_point
-
-        # Adjust the batch size based on memory limitations
-        if total_memory_required > self.max_gpu_usage * 1024 ** 3:
-            points_per_batch = int(self.max_gpu_usage * 1024 ** 3 // memory_per_point // 10)
-            # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
-        else:
-            points_per_batch = self.num_points  # Process all points at once
-
-        # Initialize outputs with the correct data type (float32 for memory efficiency)
-        ho = cp.empty(self.num_points, dtype=cp.float32)
-
-        # Preallocate ho_ztep only if necessary
-        ho_ztep = cp.empty((self.z_scan_step, num_pairs),
-                           dtype=cp.float32)  # Store values for each Z value tested per XY pair
-
-        # Process images in chunks based on the adjusted points_per_batch size
-        for i in range(0, self.num_points, points_per_batch):
-            end = min(i + points_per_batch, self.num_points)
-
-            # Load only the current batch into the GPU
-            batch_left = cp.asarray(left_Igray[i:end], dtype=cp.float32)
-            batch_right = cp.asarray(right_Igray[i:end], dtype=cp.float32)
-
-            # Debug: Check the batch size
-            # print(f"Processing batch {i // points_per_batch + 1}, size: {batch_size}")
-
-            # Mean values along time (for the current batch)
-            left_mean_batch = cp.mean(batch_left, axis=1, keepdims=True)
-            right_mean_batch = cp.mean(batch_right, axis=1, keepdims=True)
-
-            # Calculate the numerator and denominator for the correlation
-            num = cp.sum((batch_left - left_mean_batch) * (batch_right - right_mean_batch), axis=1)
-            left_sq_diff = cp.sum((batch_left - left_mean_batch) ** 2, axis=1)
-            right_sq_diff = cp.sum((batch_right - right_mean_batch) ** 2, axis=1)
-
-            den = cp.sqrt(left_sq_diff * right_sq_diff)
-            ho_batch = num / cp.maximum(den, 1e-10)
-
-            # Store the results for this batch
-            ho[i:end] = ho_batch
-
-            # Release memory after processing each batch
-            del batch_left, batch_right, left_mean_batch, right_mean_batch, ho_batch
-            cp.get_default_memory_pool().free_all_blocks()
-            gc.collect()
-
-        hmax = cp.empty(num_pairs, dtype=cp.float32)
-        Imax = cp.empty(num_pairs, dtype=cp.int64)
-        # Calculate hmax and Imax for this batch
-        for k in range(self.num_points // self.z_scan_step):
-            start_idx = k * self.z_scan_step
-            end_idx = (k + 1) * self.z_scan_step
-            ho_range = ho[start_idx:end_idx]
-
-            hmax[k] = cp.nanmax(ho_range)
-            Imax[k] = cp.nanargmax(ho_range) + k * self.z_scan_step
-
-        return cp.asnumpy(ho), cp.asnumpy(hmax), cp.asnumpy(Imax), cp.asnumpy(ho_ztep)
-
-    def spatial_correl(self, uv_left, uv_right, window_size=3):
-        """
-        Compute spatial correlation for patches around specified points across all images.
-
-        Parameters:
-        ----------
-        uv_left : (2, N) np.ndarray
-            UV coordinates for points in the left image.
-        uv_right : (2, N) np.ndarray
-            UV coordinates for points in the right image.
-        window_size : int
-            Size of the patch window around each point (default is 3).
-
-        Returns:
-        -------
-        spatial_corr : np.ndarray
-            Spatial correlation values for each point.
-        spatial_max : np.ndarray
-            Maximum correlation value for each spatial window.
-        spatial_id : np.ndarray
-            Index of the maximum correlation value for each point.
-        """
-        # Convert images to CuPy arrays
-        # self.left_images = self.left_images
-        # self.right_images = self.right_images
-
-        half_window = window_size // 2
-        height, width, num_images = self.left_images.shape
-
-        # Estimate memory usage and adjust batch size
-        memory_per_point = 2 * window_size * window_size * num_images * 4  # Approx memory per point
-        points_per_batch = max(1, int(self.max_gpu_usage * 1024 ** 3 // memory_per_point))
-        # points_per_batch = 10
-        # Allocate space for results
-        spatial_corr = cp.zeros((self.num_points), dtype=cp.float32)
-
-        for i in range(0, self.num_points, points_per_batch):
-            end_idx = min(i + points_per_batch, self.num_points)
-            uv_batch_l = cp.asarray(uv_left[:, i:end_idx])
-            uv_batch_r = cp.asarray(uv_right[:, i:end_idx])
-
-            # Compute integer and fractional parts of UV coordinates
-            x1_l = cp.clip(cp.floor(uv_batch_l[0] - half_window).astype(cp.int32), 0, width - window_size)
-            y1_l = cp.clip(cp.floor(uv_batch_l[1] - half_window).astype(cp.int32), 0, height - window_size)
-
-            x1_r = cp.clip(cp.floor(uv_batch_r[0] - half_window).astype(cp.int32), 0, width - window_size)
-            y1_r = cp.clip(cp.floor(uv_batch_r[1] - half_window).astype(cp.int32), 0, height - window_size)
-
-
-            offsets = cp.arange(window_size)
-            #
-            # # Compute indices for batch-based patch extraction
-            y_indices_l = cp.clip(y1_l[:, None] + offsets[None, :], 0, height - window_size)  # Shape: (N, win_size)
-            x_indices_l = cp.clip(x1_l[:, None] + offsets[None, :], 0, width - window_size)  # Shape: (N, win_size)
-
-            y_indices_r = cp.clip(y1_r[:, None] + offsets[None, :], 0, height - window_size)  # Shape: (N, win_size)
-            x_indices_r = cp.clip(x1_r[:, None] + offsets[None, :], 0, width - window_size)  # Shape: (N, win_size)
-
-            # Extract patches for left and right images
-            patch_left = self.left_images[
-                           y_indices_l[:, :, None],  # Add an extra axis for broadcasting across channels
-                           x_indices_l[:, None, :],
-                           :
-                           ].astype(cp.float32)  # Shape: (N, win_size, win_size, n_imgs)
-
-            patch_right = self.right_images[
-                            y_indices_r[:, :, None],
-                            x_indices_r[:, None, :],
-                            :
-                            ].astype(cp.float32)  # Shape: (N, win_size, win_size, n_imgs)
-
-            # Compute mean subtraction
-
-            mean_left = cp.mean(patch_left, axis=(1, 2), keepdims=True)  # Shape: (N, 1, 1, n_imgs)
-            mean_right = cp.mean(patch_right, axis=(1, 2), keepdims=True)
-
-            patch_left -= mean_left.astype(np.float32)
-            patch_right -= mean_right.astype(np.float32)
-            # Compute spatial correlation
-            num = cp.sum(patch_left * patch_right, axis=(1, 2))
-            den_left = cp.sum(patch_left ** 2, axis=(1, 2))
-            den_right = cp.sum(patch_right ** 2, axis=(1, 2))
-            spatial_corr[i:end_idx] = cp.sum(num, axis=1) / (
-                        cp.sqrt(cp.sum(den_left, axis=1) * cp.sum(den_right, axis=1)) + 1e-10)
-
-            del uv_batch_r, uv_batch_l, patch_left, patch_right, num, den_left, den_right
-            cp.get_default_memory_pool().free_all_blocks()
-            gc.collect()
-
-
-        # Reshape and compute maximum correlations
-        reshaped_corr = spatial_corr.reshape((-1, self.z_scan_step))
-        spatial_max = cp.nanmax(reshaped_corr, axis=1)
-        spatial_id = cp.nanargmax(reshaped_corr, axis=1) + cp.arange(reshaped_corr.shape[0]) * self.z_scan_step
-
-        # Return as NumPy arrays
-        return spatial_corr, spatial_max, spatial_id
-
-    def fuse_correlations(self, spatial_corr, temporal_corr, alpha=0.5, beta=0.5):
-        """
-        Fuse spatial and temporal correlations using a weighted sum.
-
-        Parameters:
-        spatial_corr: (N, num_images) array of spatial correlation values for each point across images.
-        temporal_corr: (N,) array of temporal correlation values for each point.
-        alpha: Weight for spatial correlation.
-        beta: Weight for temporal correlation.
-
-        Returns:
-        fused_corr: (N,) array of fused correlation values for each point.
-        """
-        # Normalize spatial correlations (optional)
-        spatial_corr_norm = spatial_corr / (np.max(spatial_corr) + 1e-10)
-
-        # Normalize temporal correlation (optional)
-        temporal_corr_norm = temporal_corr / (np.max(temporal_corr) + 1e-10)
-
-        # Combine the correlations using a weighted sum
-        fused_corr = alpha * spatial_corr_norm + beta * temporal_corr_norm  # Reshape for broadcasting
-
-        correl_max = np.empty((self.num_points // self.z_scan_step), dtype=np.float32)
-        correl_id = np.empty((self.num_points // self.z_scan_step), dtype=np.float32)
-        for k in range(self.num_points // self.z_scan_step):
-            correl_range = fused_corr[k * self.z_scan_step:(k + 1) * self.z_scan_step]
-            correl_max[k] = np.nanmax(correl_range)
-            correl_id[k] = np.nanargmax(correl_range) + k * self.z_scan_step
-
-        return fused_corr, correl_max, correl_id
-
-    def correl_mask(self, std_l, std_r, hmax, uv_left, uv_right, min_thresh=0, max_thresh=1):
-        """
-        Mask from correlation process to remove outbounds points.
-        Paramenters:
-            std_l: STD interpolation image's points
-            std_r: STD interpolation image's points
-            phi_id: Indices for min phase difference
-            min_thresh: max threshold for STD
-            max_thresh: min threshold for STD
-        Returns:
-             valid_mask: Valid 3D points on image's plane
-        """
-        valid_u_l = (uv_left[0, :] >= 0) & (uv_left[0, :] < self.left_images.shape[1])
-        valid_v_l = (uv_left[1, :] >= 0) & (uv_left[1, :] < self.left_images.shape[0])
-        valid_u_r = (uv_right[0, :] >= 0) & (uv_right[0, :] < self.right_images.shape[1])
-        valid_v_r = (uv_right[1, :] >= 0) & (uv_right[1, :] < self.right_images.shape[0])
-        valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
-
-        ho_mask = np.zeros(uv_left.shape[1], dtype=bool)
-        ho_mask[np.asarray(hmax > 0.95, np.int32)] = True
-        if len(std_l.shape) > 1 or len(std_r.shape) > 1:
-            std_l = np.std(std_l, axis=1)
-            std_r = np.std(std_r, axis=1)
-
-        valid_l = (min_thresh < std_l) & (std_l < max_thresh)
-        valid_r = (min_thresh < std_r) & (std_r < max_thresh)
-
-        valid_std = valid_r & valid_l
-
-        return valid_uv & valid_std & ho_mask
-
-    def correlation_process(self, points_3d, win_size=3, save_points=True, visualize=False):
-        """
-        Zscan process of temporal and spatial correlations.
-        Parameters:
-            win_size: (int) spatial window size
-            correl_param: tuple(float) fused correlation parameter (spatial, correlation)
-            save_points: (bool) whether to save temporal and spatial correlation images or not.
-            visualize: (bool) whether to visualize correlation images or not.
-        Returns:
-            correl_points: (X*Y, 3) list from bests correlation points.
-        """
-        t0 = time.time()
-        uv_left = self.transform_gcs2ccs(points_3d=points_3d, cam_name='left')
-        uv_right = self.transform_gcs2ccs(points_3d=points_3d, cam_name='right')
-
-        print('Transform points to image: {:.2f} s'.format(time.time() - t0))
-        t1 = time.time()
-        inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
-        inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
-
-        print('Bi-Interpolation Time: {:.2f} s'.format(time.time() - t1))
-        t2 = time.time()
-        spatial_corr, spatial_max, spatial_id = self.spatial_correl(window_size=win_size, uv_left=uv_left,
-                                                                    uv_right=uv_right)
-        print('Spatial correlation time: {:.2f} s'.format(time.time() - t2))
-        t3 = time.time()
-
-        ho, hmax, imax, ho_zstep = self.temp_cross_correlation(left_Igray=inter_left, right_Igray=inter_right)
-
-        print('Temporal cross correlation time: {:.2f} s'.format(time.time() - t3))
-
-        # correl_points = points_3d[self.correl_mask(std_left, std_right, fused_max)]
-        temp_correl_pt = points_3d[np.asarray(imax[hmax > 0.95]).astype(np.int32)]
-        space_temp_correl_pt = points_3d[np.asarray(cp.asnumpy(spatial_id[spatial_max > 0.8])).astype(np.int32)]
-
-        print('Time to process correlation: {:.2f} s'.format(time.time() - t0))
-
-        if save_points:
-            self.save_points(space_temp_correl_pt, filename='./sm3_tubo.csv')
-        if visualize:
-            self.plot_3d_points(space_temp_correl_pt[:, 0], space_temp_correl_pt[:, 1], space_temp_correl_pt[:, 2],
-                                color=None,
-                                title="Temporal x Spatial correlation result"
-                                      "\n {} imgs"
-                                      "\n{} win size".format(self.right_images.shape[2], win_size))
-            self.plot_3d_points(temp_correl_pt[:, 0], temp_correl_pt[:, 1], temp_correl_pt[:, 2],
-                                color=None,
-                                title="Temporal correlation result"
-                                      "\n {} imgs".format(self.right_images.shape[2]))
-            # fused_max[fused_max > 0.95].astype(np.float32)
-            # plot_zscan_correl(fused_corr, points_3d, nimgs=self.right_images.shape[2])
-
-        return space_temp_correl_pt
+    # def fringe_masks(self, std_l, std_r, phi_id, uv_left, uv_right, min_thresh=0, max_thresh=1):
+    #     """
+    #     Mask from fringe process to remove outbounds points.
+    #     Paramenters:
+    #         std_l: STD interpolation image's points
+    #         std_r: STD interpolation image's points
+    #         phi_id: Indices for min phase difference
+    #         min_thresh: max threshold for STD
+    #         max_thresh: min threshold for STD
+    #     Returns:
+    #          valid_mask: Valid 3D points on image's plane
+    #     """
+    #     valid_u_l = (uv_left[0, :] >= 0) & (uv_left[0, :] < self.left_images.shape[1])
+    #     valid_v_l = (uv_left[1, :] >= 0) & (uv_left[1, :] < self.left_images.shape[0])
+    #     valid_u_r = (uv_right[0, :] >= 0) & (uv_right[0, :] < self.right_images.shape[1])
+    #     valid_v_r = (uv_right[1, :] >= 0) & (uv_right[1, :] < self.right_images.shape[0])
+    #     valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
+    #     phi_mask = np.zeros(uv_left.shape[1], dtype=bool)
+    #     phi_mask[phi_id] = True
+    #     valid_l = (min_thresh < std_l) & (std_l < max_thresh)
+    #     valid_r = (min_thresh < std_r) & (std_r < max_thresh)
+    #
+    #     valid_std = valid_r & valid_l
+    #
+    #     return valid_uv & valid_std & phi_mask
+    #
+    # def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
+    #     """
+    #     Zscan for stereo fringe process
+    #     Parameters:
+    #         save_points: boolean to save or not image
+    #         visualize: boolean to visualize result
+    #     :return:
+    #         measured_pts: Valid 3D global coordinate points
+    #     """
+    #     t0 = time.time()
+    #     uv_left = self.transform_gcs2ccs(points_3d, cam_name='left')
+    #     uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
+    #     inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
+    #     inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
+    #
+    #     phi_min_id = self.phase_map(inter_left, inter_right)
+    #     measured_pts = points_3d[cp.asarray(phi_min_id, cp.int32)]
+    #
+    #     print('Zscan result dt: {} s'.format(round(time.time() - t0), 2))
+    #
+    #     if save_points:
+    #         self.save_points(measured_pts, filename='./output_points.csv')
+    #
+    #     if visualize:
+    #         self.plot_3d_points(measured_pts[:, 0], measured_pts[:, 1], measured_pts[:, 2], color=None,
+    #                             title="Fringe process output points")
+    #
+    #     return measured_pts
