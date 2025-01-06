@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import time
 import gc
 from cupyx.fallback_mode.fallback import ndarray
+import open3d as o3d
 
 class InverseTriangulation:
     def __init__(self, yaml_file):
@@ -124,9 +125,9 @@ class InverseTriangulation:
             z: array of z positions
             color: Vector of point intensity grayscale
         """
-        x = x.get()
-        y = y.get()
-        z = z.get()
+        # x = x.get()
+        # y = y.get()
+        # z = z.get()
 
         if color is None:
             color = z
@@ -407,7 +408,7 @@ class InverseTriangulation:
 
         return interpolated, std
 
-    def phase_map(self, interp_left, interp_right, debug=False):
+    def phase_map(self,interp_left, interp_right, debug=False):
         """
         Identify minimum phase map value
         Parameters:
@@ -419,6 +420,7 @@ class InverseTriangulation:
         """
         phi_map = []
         phi_min_id = []
+
         for k in range(self.num_points // self.z_scan_step):
             diff_phi = np.abs(interp_left[self.z_scan_step * k:(k + 1) * self.z_scan_step]
                               - interp_right[self.z_scan_step * k:(k + 1) * self.z_scan_step])
@@ -429,6 +431,7 @@ class InverseTriangulation:
             plt.figure()
             plt.plot(phi_map)
             plt.show()
+
         return phi_min_id
 
     def fringe_masks(self, uv_l, uv_r, std_l, std_r, phi_id, min_thresh=-0.01, max_thresh=1.01):
@@ -444,21 +447,21 @@ class InverseTriangulation:
              valid_mask: Valid 3D points on image's plane
         """
         # Verifica se as coordenadas estão dentro dos limites das máscaras
-        valid_u_l = (uv_l[0, :] >= 0) & (uv_l[0, :] < self.left_images.shape[1])
-        valid_v_l = (uv_l[1, :] >= 0) & (uv_l[1, :] < self.left_images.shape[0])
-        valid_u_r = (uv_r[0, :] >= 0) & (uv_r[0, :] < self.right_images.shape[1])
-        valid_v_r = (uv_r[1, :] >= 0) & (uv_r[1, :] < self.right_images.shape[0])
+        valid_u_l = (uv_l[0, :] >= 0) & (uv_l[0, :] < self.left_mask.shape[1])
+        valid_v_l = (uv_l[1, :] >= 0) & (uv_l[1, :] < self.left_mask.shape[0])
+        valid_u_r = (uv_r[0, :] >= 0) & (uv_r[0, :] < self.right_mask.shape[1])
+        valid_v_r = (uv_r[1, :] >= 0) & (uv_r[1, :] < self.right_mask.shape[0])
 
         # Aplica as verificações de validade nas coordenadas UV para evitar indexação fora do limite
         valid_uv_l = valid_u_l & valid_v_l
         valid_uv_r = valid_u_r & valid_v_r
 
         # Verifica os pontos válidos nas máscaras (aplica as coordenadas para obter as máscaras)
-        valid_uv_l &= (self.left_images[uv_l[1, :].clip(0, self.left_images.shape[0] - 1).astype(int),
-                uv_l[0, :].clip(0, self.left_images.shape[1] - 1).astype(int)] > 0)
+        valid_uv_l &= (self.left_mask[uv_l[1, :].clip(0, self.left_mask.shape[0] - 1).astype(int),
+                uv_l[0, :].clip(0, self.left_mask.shape[1] - 1).astype(int)] > 0)
 
-        valid_uv_r &= (self.right_images[uv_r[1, :].clip(0, self.right_images.shape[0] - 1).astype(int),
-                uv_r[0, :].clip(0, self.right_images.shape[1] - 1).astype(int)] > 0)
+        valid_uv_r &= (self.right_mask[uv_r[1, :].clip(0, self.right_mask.shape[0] - 1).astype(int),
+                uv_r[0, :].clip(0, self.right_mask.shape[1] - 1).astype(int)] > 0)
 
         # Combine as verificações dos limites
         valid_uv = valid_uv_r & valid_uv_l
@@ -470,15 +473,10 @@ class InverseTriangulation:
         # Verificação dos thresholds de `std` para pontos válidos
         valid_l = (min_thresh < std_l) & (std_l < max_thresh)
         valid_r = (min_thresh < std_r) & (std_r < max_thresh)
-        valid_std = valid_r & valid_l
-        valid_std = valid_std[:, 0]
+        valid_std = valid_r[:, 0] & valid_l[:, 0]
 
         # Retorne a máscara final considerando os pontos válidos em `uv`, `phi` e `std`
         mask = valid_uv & phi_mask & valid_std
-        # print("Shape valid_uv:", valid_uv.shape)
-        # print("Shape phi_mask:", phi_mask.shape)
-        # print("Shape valid_std:", valid_std.shape)
-        # print("Final mask points:", np.sum(mask))
         return mask
 
     def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
@@ -498,7 +496,7 @@ class InverseTriangulation:
 
         phi_min_id = self.phase_map(inter_left, inter_right)
         fringe_mask = self.fringe_masks(uv_l = uv_left, uv_r = uv_right, std_l = std_left, std_r = std_right, phi_id = phi_min_id)
-        measured_pts = points_3d[cp.asarray(fringe_mask, cp.int32)]
+        measured_pts = points_3d[fringe_mask]
 
         print('Zscan result dt: {} s'.format(round(time.time() - t0), 2))
 
@@ -511,57 +509,44 @@ class InverseTriangulation:
 
         return measured_pts
 
-    # def fringe_masks(self, std_l, std_r, phi_id, uv_left, uv_right, min_thresh=0, max_thresh=1):
-    #     """
-    #     Mask from fringe process to remove outbounds points.
-    #     Paramenters:
-    #         std_l: STD interpolation image's points
-    #         std_r: STD interpolation image's points
-    #         phi_id: Indices for min phase difference
-    #         min_thresh: max threshold for STD
-    #         max_thresh: min threshold for STD
-    #     Returns:
-    #          valid_mask: Valid 3D points on image's plane
-    #     """
-    #     valid_u_l = (uv_left[0, :] >= 0) & (uv_left[0, :] < self.left_images.shape[1])
-    #     valid_v_l = (uv_left[1, :] >= 0) & (uv_left[1, :] < self.left_images.shape[0])
-    #     valid_u_r = (uv_right[0, :] >= 0) & (uv_right[0, :] < self.right_images.shape[1])
-    #     valid_v_r = (uv_right[1, :] >= 0) & (uv_right[1, :] < self.right_images.shape[0])
-    #     valid_uv = valid_u_l & valid_u_r & valid_v_l & valid_v_r
-    #     phi_mask = np.zeros(uv_left.shape[1], dtype=bool)
-    #     phi_mask[phi_id] = True
-    #     valid_l = (min_thresh < std_l) & (std_l < max_thresh)
-    #     valid_r = (min_thresh < std_r) & (std_r < max_thresh)
-    #
-    #     valid_std = valid_r & valid_l
-    #
-    #     return valid_uv & valid_std & phi_mask
-    #
-    # def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
-    #     """
-    #     Zscan for stereo fringe process
-    #     Parameters:
-    #         save_points: boolean to save or not image
-    #         visualize: boolean to visualize result
-    #     :return:
-    #         measured_pts: Valid 3D global coordinate points
-    #     """
-    #     t0 = time.time()
-    #     uv_left = self.transform_gcs2ccs(points_3d, cam_name='left')
-    #     uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
-    #     inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
-    #     inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
-    #
-    #     phi_min_id = self.phase_map(inter_left, inter_right)
-    #     measured_pts = points_3d[cp.asarray(phi_min_id, cp.int32)]
-    #
-    #     print('Zscan result dt: {} s'.format(round(time.time() - t0), 2))
-    #
-    #     if save_points:
-    #         self.save_points(measured_pts, filename='./output_points.csv')
-    #
-    #     if visualize:
-    #         self.plot_3d_points(measured_pts[:, 0], measured_pts[:, 1], measured_pts[:, 2], color=None,
-    #                             title="Fringe process output points")
-    #
-    #     return measured_pts
+    def filter_points_by_depth(self, points, depth_threshold=0.05):
+        # Se 'points' for um array Cupy
+        if isinstance(points, cp.ndarray):
+            points = points.get()  # Converte para NumPy
+
+        # Converte o numpy array para um objeto PointCloud do Open3D
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+
+        # Cria a octree com base na profundidade, qunado maior mais divisão
+        octree = o3d.geometry.Octree(max_depth=20)
+        octree.convert_from_point_cloud(pcd, size_expand=0.01)
+
+        filtered_points = []
+
+        # Função para processar os blocos da octree
+        def process_leaf(node, node_info):
+            # Verifica se o nó atual é um bloco
+            if isinstance(node, o3d.geometry.OctreeLeafNode):
+                # Obtém os pontos do nó
+                points_in_leaf = np.asarray([pcd.points[idx] for idx in node.indices])
+
+                # Calcula a profundidade média e desvio padrão da coordenada Z
+                mean_depth = np.mean(points_in_leaf[:, 2])
+                std_depth = np.std(points_in_leaf[:, 2])
+
+                # Filtra os pontos com base na profundidade media de cada bloco
+                for point in points_in_leaf:
+                    if np.abs(point[2] - mean_depth) <= depth_threshold:
+                        filtered_points.append(point)
+
+        # Processa todos os nós da octree
+        octree.traverse(process_leaf)
+
+        # Cria uma nova nuvem de pontos com os pontos filtrados
+        filtered_pcd = o3d.geometry.PointCloud()
+        filtered_pcd.points = o3d.utility.Vector3dVector(filtered_points)
+
+        filtered_pcd, ind = pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=1.0)
+
+        return filtered_pcd

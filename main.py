@@ -7,8 +7,6 @@ import cupy as cp
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
 from include.InverseTriangulation import InverseTriangulation
-import octree_process
-
 
 def main():
     VISUALIZE = True
@@ -95,9 +93,8 @@ def main():
         #     # stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
         #     stereo.calculate_abs_phi_images(visualize=False)
 
-        # Acquired the abs images
+        # Acquired the images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
-
         modulation_mask_left = stereo.calculate_phi(stereo.images_left[:, :, :7], visualize=False)[0]
         modulation_mask_right = stereo.calculate_phi(stereo.images_right[:, :, :7], visualize=False)[0]
 
@@ -109,32 +106,31 @@ def main():
         zscan = InverseTriangulation(yaml_file)
 
         # np.arange (min_val, max_val, step)
-        x_lin = cp.arange(-250, 500, 4)
-        y_lin = cp.arange(-100, 400, 4)
-        z_lin = cp.arange(-200, 200, 2)
+        x_lin = cp.arange(-250, 500, 1)
+        y_lin = cp.arange(-100, 400, 1)
+        z_lin = cp.arange(-200, 400, 0.1)
         num_splits = 10
         x_split = cp.array_split(x_lin, num_splits)
         y_split = cp.array_split(y_lin, num_splits)
         points_result = []
         count = 0
+        zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left,
+                          right_mask=modulation_mask_right)
         for x_arr in x_split:
             for y_arr in y_split:
                 points_3d = zscan.points3D_arrays(x_arr, y_arr, z_lin, visualize=False)
-                zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left, right_mask=modulation_mask_right)
+                # zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left, right_mask=modulation_mask_right)
                 z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=False, visualize=False)
                 points_result.append(z_zcan_points)
                 count += 1
                 print(count)
 
-        # for i, array in enumerate(points_result):
-        #     print(f"Shape do array {i}: {array.shape}")
-
         points_result_ar = cp.concatenate(points_result, axis=0)
-        # points_result_ar_filtered = octree_process.filter_points_by_depth(points_result_ar, depth_threshold=0.001)
-        # points_result_ar_filtered = np.asarray(points_result_ar_filtered.points)
-        zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
-        # zscan.plot_3d_points(points_result_ar_filtered[:, 0], points_result_ar_filtered[:, 1],
-        #                      points_result_ar_filtered[:, 2], color=None, title='Filtered Points')
+        points_result_ar_filtered = zscan.filter_points_by_depth(points_result_ar, depth_threshold=0.001)
+        points_result_ar_filtered = np.asarray(points_result_ar_filtered.points)
+        # zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
+        zscan.plot_3d_points(points_result_ar_filtered[:, 0], points_result_ar_filtered[:, 1],
+                             points_result_ar_filtered[:, 2], color=None, title='Filtered Points')
         print('wait')
 
 if __name__ == '__main__':
