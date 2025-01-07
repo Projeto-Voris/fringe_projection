@@ -106,16 +106,16 @@ def main():
         zscan = InverseTriangulation(yaml_file)
 
         # np.arange (min_val, max_val, step)
-        x_lin = cp.arange(-250, 500, 1)
-        y_lin = cp.arange(-100, 400, 1)
-        z_lin = cp.arange(-200, 400, 0.1)
+        x_lin = cp.arange(-250, 500, 4)
+        y_lin = cp.arange(-100, 400, 4)
+        z_lin = cp.arange(-500, 100, 2)
         num_splits = 10
         x_split = cp.array_split(x_lin, num_splits)
         y_split = cp.array_split(y_lin, num_splits)
-        points_result = []
-        count = 0
         zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left,
                           right_mask=modulation_mask_right)
+        points_result = []
+        count = 0
         for x_arr in x_split:
             for y_arr in y_split:
                 points_3d = zscan.points3D_arrays(x_arr, y_arr, z_lin, visualize=False)

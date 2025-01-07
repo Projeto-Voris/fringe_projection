@@ -6,6 +6,8 @@ import time
 import gc
 from cupyx.fallback_mode.fallback import ndarray
 import open3d as o3d
+import cProfile
+import pstats
 
 class InverseTriangulation:
     def __init__(self, yaml_file):
@@ -194,12 +196,102 @@ class InverseTriangulation:
         # Convert bytes to GB
         return total_memory / (1024 ** 3)
 
+    # def transform_gcs2ccs(self, points_3d, cam_name):
+    #     """
+    #     Transform Global Coordinate System (xg, yg, zg)
+    #      to Camera's Coordinate System (xc, yc, zc) and transform to Image's plane (uv)
+    #      Returns:
+    #          uv_image_points: (2,N) reprojected points to image's plane
+    #     """
+    #     # Convert all inputs to CuPy arrays for GPU computation
+    #     xyz_gcs = cp.asarray(points_3d)
+    #     k = cp.asarray(self.camera_params[cam_name]['kk'])
+    #     dist = cp.asarray(self.camera_params[cam_name]['kc'])
+    #     rot = cp.asarray(self.camera_params[cam_name]['r'])
+    #     tran = cp.asarray(self.camera_params[cam_name]['t'])
+    #
+    #     # Estimate the size of the input and output arrays
+    #     # num_points = xyz_gcs.shape[0]
+    #     bytes_per_float32 = 8  # Simulate double-precision float usage
+    #
+    #     # Estimate the memory required per point for transformation and intermediate steps
+    #     memory_per_point = (4 * 3 * bytes_per_float32) + (3 * bytes_per_float32)  # For xyz_gcs_1 and xyz_ccs
+    #     total_memory_required = self.num_points * memory_per_point
+    #
+    #     # Adjust the batch size based on memory limitations
+    #     if total_memory_required > self.max_gpu_usage * 1024 ** 3:
+    #         points_per_batch = int(
+    #             (self.max_gpu_usage * 1024 ** 3 // memory_per_point) // 10)  # Reduce batch size more aggressively
+    #         # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
+    #     else:
+    #         points_per_batch = self.num_points  # Process all points at once
+    #
+    #     # Initialize an empty list to store results (on the CPU)
+    #     uv_points_list = []
+    #
+    #     # Process points in batches
+    #     for i in range(0, self.num_points, points_per_batch):
+    #         end = min(i + points_per_batch, self.num_points)
+    #         xyz_gcs_batch = xyz_gcs[i:end]
+    #
+    #         # Debug: Check the shape of the batch
+    #         # print(f"Processing batch {i // points_per_batch + 1}, size: {xyz_gcs_batch.shape}")
+    #
+    #         # Add one extra line of ones to the global coordinates
+    #         ones = cp.ones((xyz_gcs_batch.shape[0], 1), dtype=cp.float16)  # Double-precision floats
+    #         xyz_gcs_1 = cp.hstack((xyz_gcs_batch, ones))
+    #
+    #         # Create the rotation and translation matrix
+    #         rt_matrix = cp.vstack(
+    #             (cp.hstack((rot, tran[:, None])), cp.array([0, 0, 0, 1], dtype=cp.float16)))
+    #
+    #         # Multiply the RT matrix with global points [X; Y; Z; 1]
+    #         xyz_ccs = cp.dot(rt_matrix, xyz_gcs_1.T)
+    #         del xyz_gcs_1  # Immediately delete
+    #
+    #         # Normalize by dividing by Z to get normalized image coordinates
+    #         epsilon = 1e-10  # Small value to prevent division by zero
+    #         xyz_ccs_norm = cp.hstack(
+    #             (xyz_ccs[:2, :].T / cp.maximum(xyz_ccs[2, :, cp.newaxis], epsilon),
+    #              cp.ones((xyz_ccs.shape[1], 1), dtype=cp.float16))
+    #         ).T
+    #         del xyz_ccs  # Immediately delete
+    #
+    #         # Apply distortion using the GPU
+    #         xyz_ccs_norm_dist = self.undistorted_points(xyz_ccs_norm.T, dist)
+    #         del xyz_ccs_norm  # Free memory
+    #
+    #         # Compute image points using the intrinsic matrix K
+    #         uv_points_batch = cp.dot(k, xyz_ccs_norm_dist.T)
+    #         del xyz_ccs_norm_dist  # Free memory
+    #
+    #         # Debug: Check the shape of the result
+    #         # print(f"uv_points_batch shape: {uv_points_batch.shape}")
+    #
+    #         # Transfer results back to CPU after processing each batch
+    #         uv_points_list.append(cp.asnumpy(uv_points_batch))
+    #
+    #         # Free GPU memory after processing each batch
+    #         cp.get_default_memory_pool().free_all_blocks()
+    #         gc.collect()
+    #
+    #     # Ensure consistent dimensions when concatenating batches
+    #     try:
+    #         # Concatenate all batches along axis 0 (rows)
+    #         uv_points = cp.hstack(uv_points_list)  # Use np.hstack for matching shapes
+    #
+    #     except ValueError as e:
+    #         print(f"Error during concatenation: {e}")
+    #         raise
+    #
+    #     return uv_points[:2, :].astype(cp.float16)
+
     def transform_gcs2ccs(self, points_3d, cam_name):
         """
         Transform Global Coordinate System (xg, yg, zg)
-         to Camera's Coordinate System (xc, yc, zc) and transform to Image's plane (uv)
-         Returns:
-             uv_image_points: (2,N) reprojected points to image's plane
+        to Camera's Coordinate System (xc, yc, zc) and transform to Image's plane (uv)
+        Returns:
+            uv_image_points: (2,N) reprojected points to image's plane
         """
         # Convert all inputs to CuPy arrays for GPU computation
         xyz_gcs = cp.asarray(points_3d)
@@ -208,23 +300,17 @@ class InverseTriangulation:
         rot = cp.asarray(self.camera_params[cam_name]['r'])
         tran = cp.asarray(self.camera_params[cam_name]['t'])
 
-        # Estimate the size of the input and output arrays
-        # num_points = xyz_gcs.shape[0]
-        bytes_per_float32 = 8  # Simulate double-precision float usage
-
-        # Estimate the memory required per point for transformation and intermediate steps
-        memory_per_point = (4 * 3 * bytes_per_float32) + (3 * bytes_per_float32)  # For xyz_gcs_1 and xyz_ccs
+        # Estimate memory required for processing
+        bytes_per_float32 = 8  # Float32 size in bytes
+        memory_per_point = (4 * 3 * bytes_per_float32) + (3 * bytes_per_float32)  # Approx. per point
         total_memory_required = self.num_points * memory_per_point
 
-        # Adjust the batch size based on memory limitations
-        if total_memory_required > self.max_gpu_usage * 1024 ** 3:
-            points_per_batch = int(
-                (self.max_gpu_usage * 1024 ** 3 // memory_per_point) // 10)  # Reduce batch size more aggressively
-            # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
-        else:
-            points_per_batch = self.num_points  # Process all points at once
+        # Adjust batch size based on memory limitations
+        free_mem, _ = cp.cuda.Device().mem_info
+        points_per_batch = int(free_mem // memory_per_point)
+        points_per_batch = max(points_per_batch, 1)  # Ensure at least one point per batch
 
-        # Initialize an empty list to store results (on the CPU)
+        # Initialize a list to store results on the GPU
         uv_points_list = []
 
         # Process points in batches
@@ -232,11 +318,8 @@ class InverseTriangulation:
             end = min(i + points_per_batch, self.num_points)
             xyz_gcs_batch = xyz_gcs[i:end]
 
-            # Debug: Check the shape of the batch
-            # print(f"Processing batch {i // points_per_batch + 1}, size: {xyz_gcs_batch.shape}")
-
             # Add one extra line of ones to the global coordinates
-            ones = cp.ones((xyz_gcs_batch.shape[0], 1), dtype=cp.float16)  # Double-precision floats
+            ones = cp.ones((xyz_gcs_batch.shape[0], 1), dtype=cp.float16)
             xyz_gcs_1 = cp.hstack((xyz_gcs_batch, ones))
 
             # Create the rotation and translation matrix
@@ -246,7 +329,6 @@ class InverseTriangulation:
 
             # Multiply the RT matrix with global points [X; Y; Z; 1]
             xyz_ccs = cp.dot(rt_matrix, xyz_gcs_1.T)
-            del xyz_gcs_1  # Immediately delete
 
             # Normalize by dividing by Z to get normalized image coordinates
             epsilon = 1e-10  # Small value to prevent division by zero
@@ -254,36 +336,25 @@ class InverseTriangulation:
                 (xyz_ccs[:2, :].T / cp.maximum(xyz_ccs[2, :, cp.newaxis], epsilon),
                  cp.ones((xyz_ccs.shape[1], 1), dtype=cp.float16))
             ).T
-            del xyz_ccs  # Immediately delete
 
             # Apply distortion using the GPU
             xyz_ccs_norm_dist = self.undistorted_points(xyz_ccs_norm.T, dist)
-            del xyz_ccs_norm  # Free memory
 
             # Compute image points using the intrinsic matrix K
             uv_points_batch = cp.dot(k, xyz_ccs_norm_dist.T)
-            del xyz_ccs_norm_dist  # Free memory
 
-            # Debug: Check the shape of the result
-            # print(f"uv_points_batch shape: {uv_points_batch.shape}")
-
-            # Transfer results back to CPU after processing each batch
-            uv_points_list.append(cp.asnumpy(uv_points_batch))
+            # Store results in GPU memory
+            uv_points_list.append(uv_points_batch)
 
             # Free GPU memory after processing each batch
             cp.get_default_memory_pool().free_all_blocks()
             gc.collect()
 
-        # Ensure consistent dimensions when concatenating batches
-        try:
-            # Concatenate all batches along axis 0 (rows)
-            uv_points = cp.hstack(uv_points_list)  # Use np.hstack for matching shapes
+        # Concatenate all batches on the GPU
+        uv_points = cp.hstack(uv_points_list)
 
-        except ValueError as e:
-            print(f"Error during concatenation: {e}")
-            raise
-
-        return uv_points[:2, :].astype(cp.float16)
+        # Transfer final result to CPU in a single operation
+        return cp.asnumpy(uv_points[:2, :]).astype(cp.float16)
 
     def undistorted_points(self, points, dist):
         """
@@ -446,6 +517,9 @@ class InverseTriangulation:
         Returns:
              valid_mask: Valid 3D points on image's plane
         """
+        uv_l = cp.asarray(uv_l)
+        uv_r = cp.asarray(uv_r)
+
         # Verifica se as coordenadas estão dentro dos limites das máscaras
         valid_u_l = (uv_l[0, :] >= 0) & (uv_l[0, :] < self.left_mask.shape[1])
         valid_v_l = (uv_l[1, :] >= 0) & (uv_l[1, :] < self.left_mask.shape[0])
@@ -491,14 +565,21 @@ class InverseTriangulation:
         t0 = time.time()
         uv_left = self.transform_gcs2ccs(points_3d, cam_name='left')
         uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
+
+        print('Transform points to image: {} s'.format(round(time.time() - t0), 2))
+
+        t1 = time.time()
+
         inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
         inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
 
-        phi_min_id = self.phase_map(inter_left, inter_right)
-        fringe_mask = self.fringe_masks(uv_l = uv_left, uv_r = uv_right, std_l = std_left, std_r = std_right, phi_id = phi_min_id)
-        measured_pts = points_3d[fringe_mask]
+        print('Bi-Interpolation: {} s'.format(round(time.time() - t1, 2)))
 
-        print('Zscan result dt: {} s'.format(round(time.time() - t0), 2))
+        t2 = time.time()
+        phi_min_id = self.phase_map(inter_left, inter_right)
+        measured_pts = points_3d[self.fringe_masks(uv_l = uv_left, uv_r = uv_right, std_l = std_left, std_r = std_right, phi_id = phi_min_id)]
+
+        print('Zscan result dt: {} s'.format(round(time.time() - t2), 2))
 
         if save_points:
             self.save_points(measured_pts, filename='./sm3_duto.csv')
@@ -507,7 +588,60 @@ class InverseTriangulation:
             self.plot_3d_points(measured_pts[:, 0], measured_pts[:, 1], measured_pts[:, 2], color=None,
                                 title="Fringe process output points")
 
+        del uv_left, uv_right,inter_left, inter_right, std_left, std_right, phi_min_id
         return measured_pts
+
+    # def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
+    #     """
+    #     Zscan for stereo fringe process
+    #     Parameters:
+    #         save_points: boolean to save or not image
+    #         visualize: boolean to visualize result
+    #     :return:
+    #         measured_pts: Valid 3D global coordinate points
+    #     """
+    #
+    #     def process_steps():
+    #         t0 = time.time()
+    #         uv_left = self.transform_gcs2ccs(points_3d, cam_name='left')
+    #         uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
+    #         print('Transform points to image: {} s'.format(round(time.time() - t0), 2))
+    #
+    #         t1 = time.time()
+    #         inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
+    #         inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
+    #         print('Bi-Interpolation: {} s'.format(round(time.time() - t1, 2)))
+    #
+    #         t2 = time.time()
+    #         phi_min_id = self.phase_map(inter_left, inter_right)
+    #         fringe_mask = self.fringe_masks(uv_l=uv_left, uv_r=uv_right, std_l=std_left, std_r=std_right,
+    #                                         phi_id=phi_min_id)
+    #         measured_pts = points_3d[fringe_mask]
+    #         print('Zscan result dt: {} s'.format(round(time.time() - t2), 2))
+    #
+    #         if save_points:
+    #             self.save_points(measured_pts, filename='./sm3_duto.csv')
+    #
+    #         if visualize:
+    #             self.plot_3d_points(measured_pts[:, 0], measured_pts[:, 1], measured_pts[:, 2], color=None,
+    #                                 title="Fringe process output points")
+    #
+    #         return measured_pts
+    #
+    #     # Usar cProfile para medir o desempenho
+    #     profiler = cProfile.Profile()
+    #     profiler.enable()
+    #     measured_pts = process_steps()  # Chamando as etapas principais
+    #     profiler.disable()
+    #
+    #     # Salvar os resultados do profiler em um arquivo
+    #     with open('profile_results.txt', 'w') as f:
+    #         stats = pstats.Stats(profiler, stream=f)
+    #         stats.strip_dirs()
+    #         stats.sort_stats('cumulative')
+    #         stats.print_stats()
+    #
+    #     return measured_pts
 
     def filter_points_by_depth(self, points, depth_threshold=0.05):
         # Se 'points' for um array Cupy
