@@ -75,45 +75,34 @@ def main():
         stereo_ctrl.cleanup()
         # stereo.normalize_b_w()
 
-        # if k != 27:
-        #     #     width, height, _ = self.images_left.shape
-        #     bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-        #     br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-        #     # stereo.calculate_phi(stereo.images_left[:, :, :int(stereo.get_steps())])
-        #     white_left, white_right = stereo.normalize_white(bl, br)
-        #     # plt.imshow(bl, cmap='gray')
-        #     # plt.show()
-        #     # plt.imshow(br, cmap='gray')
-        #     # plt.show()
-        #     # qsi_left = stereo.calculate_qsi(stereo.images_left[:, :, 8:])
-        #     # qsi_right = stereo.calculate_qsi(stereo.images_right[:, :, 8:])
-        #     # stereo.remap_qsi_image(qsi_left, stereo.get_gc_order_v())
-        #     # stereo.remap_qsi_image(qsi_right, stereo.get_gc_order_v())
-        #     # stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
-        #     # stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
-        #     stereo.calculate_abs_phi_images(visualize=False)
-
         # Acquired the images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
         modulation_mask_left = stereo.calculate_phi(stereo.images_left[:, :, :7], visualize=False)[0]
         modulation_mask_right = stereo.calculate_phi(stereo.images_right[:, :, :7], visualize=False)[0]
 
         # read the yaml_file
-        # yaml_file = '/home/daniel/PycharmProjects/fringe_projection/params/20241018_bouget.yaml'
         yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241212_calib_daniel.yaml'
 
         # Inverse Triangulation for Fringe projection
         zscan = InverseTriangulation(yaml_file)
 
         # np.arange (min_val, max_val, step)
-        x_lin = cp.arange(-250, 500, 10)
-        y_lin = cp.arange(-100, 400, 10)
+        x_lin = cp.arange(-250, 500, 20)
+        y_lin = cp.arange(-100, 400, 20)
         z_lin = cp.arange(-500, 100, 0.1)
+
+        # Número de dívisões do espaço
         num_splits = 10
+
+        # Dívide o espaço em blocos para processamento de cada bloco
         x_split = cp.array_split(x_lin, num_splits)
         y_split = cp.array_split(y_lin, num_splits)
+
+        # Lê as imagens de fase absoluto e o mapa de modularização
         zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left,
                           right_mask=modulation_mask_right)
+
+        # Lista para o armazenamento do resultado dos processamentos de cada bloco
         points_result = []
         count = 0
         for x_arr in x_split:
@@ -124,21 +113,17 @@ def main():
                 count += 1
                 print(count)
 
+        # Junção dos resultados de cada bloco
         points_result_ar = cp.concatenate(points_result, axis=0)
+
+        # Aplicação de filtro com base no processo de octree, onde são descartados pontos que estiverem fora do limite de profundidade e muito distante da média de cada bloco
         points_result_ar_filtered = zscan.filter_points_by_depth(points_result_ar, depth_threshold=0.001)
         points_result_ar_filtered = np.asarray(points_result_ar_filtered.points)
 
-        # Calcular o máximo e mínimo para cada eixo da nuvem de pontos filtrada
+        # Calcular o máximo e mínimo para cada eixo da nuvem de pontos filtrada para segundo prcessamento com maior refinamento
         x_min, x_max = points_result_ar_filtered[:, 0].min(), points_result_ar_filtered[:, 0].max()
         y_min, y_max = points_result_ar_filtered[:, 1].min(), points_result_ar_filtered[:, 1].max()
         z_min, z_max = points_result_ar_filtered[:, 2].min(), points_result_ar_filtered[:, 2].max()
-
-        print(f"Valores para o eixo X (nuvem de pontos): Min = {x_min}, Max = {x_max}")
-        print(f"Valores para o eixo Y (nuvem de pontos): Min = {y_min}, Max = {y_max}")
-        print(f"Valores para o eixo Z (nuvem de pontos): Min = {z_min}, Max = {z_max}")
-
-        zscan.plot_3d_points(points_result_ar_filtered[:, 0], points_result_ar_filtered[:, 1],
-                             points_result_ar_filtered[:, 2], color=None, title='Filtered Points')
 
         x_lin_refined = cp.arange(x_min, x_max, 1)
         y_lin_refined = cp.arange(y_min, y_max, 1)

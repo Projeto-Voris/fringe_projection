@@ -2,12 +2,9 @@ import numpy as np
 import cupy as cp
 import yaml
 import matplotlib.pyplot as plt
-import time
 import gc
 from cupyx.fallback_mode.fallback import ndarray
 import open3d as o3d
-import cProfile
-import pstats
 
 class InverseTriangulation:
     def __init__(self, yaml_file):
@@ -41,35 +38,6 @@ class InverseTriangulation:
         self.right_images = cp.asarray(right_imgs)
         self.left_mask = cp.asarray(left_mask)
         self.right_mask = cp.asarray(right_mask)
-
-    # def points3d(self, x_lim=(-5, 5), y_lim=(-5, 5), z_lim=(0, 5), xy_step=1.0, z_step=1.0, visualize=False):
-    #     """
-    #         Create a 3D space of combination from linear arrays of X Y Z
-    #         Parameters:
-    #             x_lim: Begin and end of linear space of X
-    #             y_lim: Begin and end of linear space of Y
-    #             z_lim: Begin and end of linear space of Z
-    #             xy_step: Step size between X and Y
-    #             z_step: Step size between Z and X
-    #             visualize: Visualize the 3D space
-    #         Returns:
-    #             cube_points: combination of X Y and Z
-    #         """
-    #     x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
-    #     y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
-    #     z_lin = np.arange(z_lim[0], z_lim[1], z_step)
-    #
-    #     mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
-    #
-    #     c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
-    #
-    #     if visualize:
-    #         self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
-    #
-    #     self.num_points = c_points.shape[0]
-    #     self.z_scan_step = np.unique(c_points[:, 2]).shape[0]
-    #
-    #     return c_points.astype(np.float16)
 
     def points3d_zstep(self, x_lim=(-5, 5), y_lim=(-5, 5), xy_step=1.0, z_lin=np.arange(0, 100, 0.1), visualize=False):
         """
@@ -127,9 +95,6 @@ class InverseTriangulation:
             z: array of z positions
             color: Vector of point intensity grayscale
         """
-        # x = x.get()
-        # y = y.get()
-        # z = z.get()
 
         if color is None:
             color = z
@@ -195,96 +160,6 @@ class InverseTriangulation:
         total_memory = cp.cuda.runtime.getDeviceProperties(device_id)['totalGlobalMem']
         # Convert bytes to GB
         return total_memory / (1024 ** 3)
-
-    # def transform_gcs2ccs(self, points_3d, cam_name):
-    #     """
-    #     Transform Global Coordinate System (xg, yg, zg)
-    #      to Camera's Coordinate System (xc, yc, zc) and transform to Image's plane (uv)
-    #      Returns:
-    #          uv_image_points: (2,N) reprojected points to image's plane
-    #     """
-    #     # Convert all inputs to CuPy arrays for GPU computation
-    #     xyz_gcs = cp.asarray(points_3d)
-    #     k = cp.asarray(self.camera_params[cam_name]['kk'])
-    #     dist = cp.asarray(self.camera_params[cam_name]['kc'])
-    #     rot = cp.asarray(self.camera_params[cam_name]['r'])
-    #     tran = cp.asarray(self.camera_params[cam_name]['t'])
-    #
-    #     # Estimate the size of the input and output arrays
-    #     # num_points = xyz_gcs.shape[0]
-    #     bytes_per_float32 = 8  # Simulate double-precision float usage
-    #
-    #     # Estimate the memory required per point for transformation and intermediate steps
-    #     memory_per_point = (4 * 3 * bytes_per_float32) + (3 * bytes_per_float32)  # For xyz_gcs_1 and xyz_ccs
-    #     total_memory_required = self.num_points * memory_per_point
-    #
-    #     # Adjust the batch size based on memory limitations
-    #     if total_memory_required > self.max_gpu_usage * 1024 ** 3:
-    #         points_per_batch = int(
-    #             (self.max_gpu_usage * 1024 ** 3 // memory_per_point) // 10)  # Reduce batch size more aggressively
-    #         # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
-    #     else:
-    #         points_per_batch = self.num_points  # Process all points at once
-    #
-    #     # Initialize an empty list to store results (on the CPU)
-    #     uv_points_list = []
-    #
-    #     # Process points in batches
-    #     for i in range(0, self.num_points, points_per_batch):
-    #         end = min(i + points_per_batch, self.num_points)
-    #         xyz_gcs_batch = xyz_gcs[i:end]
-    #
-    #         # Debug: Check the shape of the batch
-    #         # print(f"Processing batch {i // points_per_batch + 1}, size: {xyz_gcs_batch.shape}")
-    #
-    #         # Add one extra line of ones to the global coordinates
-    #         ones = cp.ones((xyz_gcs_batch.shape[0], 1), dtype=cp.float16)  # Double-precision floats
-    #         xyz_gcs_1 = cp.hstack((xyz_gcs_batch, ones))
-    #
-    #         # Create the rotation and translation matrix
-    #         rt_matrix = cp.vstack(
-    #             (cp.hstack((rot, tran[:, None])), cp.array([0, 0, 0, 1], dtype=cp.float16)))
-    #
-    #         # Multiply the RT matrix with global points [X; Y; Z; 1]
-    #         xyz_ccs = cp.dot(rt_matrix, xyz_gcs_1.T)
-    #         del xyz_gcs_1  # Immediately delete
-    #
-    #         # Normalize by dividing by Z to get normalized image coordinates
-    #         epsilon = 1e-10  # Small value to prevent division by zero
-    #         xyz_ccs_norm = cp.hstack(
-    #             (xyz_ccs[:2, :].T / cp.maximum(xyz_ccs[2, :, cp.newaxis], epsilon),
-    #              cp.ones((xyz_ccs.shape[1], 1), dtype=cp.float16))
-    #         ).T
-    #         del xyz_ccs  # Immediately delete
-    #
-    #         # Apply distortion using the GPU
-    #         xyz_ccs_norm_dist = self.undistorted_points(xyz_ccs_norm.T, dist)
-    #         del xyz_ccs_norm  # Free memory
-    #
-    #         # Compute image points using the intrinsic matrix K
-    #         uv_points_batch = cp.dot(k, xyz_ccs_norm_dist.T)
-    #         del xyz_ccs_norm_dist  # Free memory
-    #
-    #         # Debug: Check the shape of the result
-    #         # print(f"uv_points_batch shape: {uv_points_batch.shape}")
-    #
-    #         # Transfer results back to CPU after processing each batch
-    #         uv_points_list.append(cp.asnumpy(uv_points_batch))
-    #
-    #         # Free GPU memory after processing each batch
-    #         cp.get_default_memory_pool().free_all_blocks()
-    #         gc.collect()
-    #
-    #     # Ensure consistent dimensions when concatenating batches
-    #     try:
-    #         # Concatenate all batches along axis 0 (rows)
-    #         uv_points = cp.hstack(uv_points_list)  # Use np.hstack for matching shapes
-    #
-    #     except ValueError as e:
-    #         print(f"Error during concatenation: {e}")
-    #         raise
-    #
-    #     return uv_points[:2, :].astype(cp.float16)
 
     def transform_gcs2ccs(self, points_3d, cam_name):
         """
@@ -479,32 +354,6 @@ class InverseTriangulation:
 
         return interpolated, std
 
-    # def phase_map(self,interp_left, interp_right, debug=False):
-    #     """
-    #     Identify minimum phase map value
-    #     Parameters:
-    #         interp_left: left interpolated points
-    #         interp_right: right interpolated points
-    #         debug: if true, visualize phi_map array
-    #     Returns:
-    #         phi_min_id: indices of minimum phase map values.
-    #     """
-    #     phi_map = []
-    #     phi_min_id = []
-    #
-    #     for k in range(self.num_points // self.z_scan_step):
-    #         diff_phi = np.abs(interp_left[self.z_scan_step * k:(k + 1) * self.z_scan_step]
-    #                           - interp_right[self.z_scan_step * k:(k + 1) * self.z_scan_step])
-    #         phi_min_id.append(np.argmin(diff_phi) + k * self.z_scan_step)
-    #         if debug:
-    #             phi_map.append(diff_phi)
-    #     if debug:
-    #         plt.figure()
-    #         plt.plot(phi_map)
-    #         plt.show()
-    #
-    #     return phi_min_id
-
     def phase_map(self, interp_left, interp_right, debug=False):
         """
         Identify minimum phase map value.
@@ -553,6 +402,7 @@ class InverseTriangulation:
         Returns:
              valid_mask: Valid 3D points on image's plane
         """
+        # converte as coordenadas em um array cupy
         uv_l = cp.asarray(uv_l)
         uv_r = cp.asarray(uv_r)
 
@@ -598,24 +448,19 @@ class InverseTriangulation:
         :return:
             measured_pts: Valid 3D global coordinate points
         """
-        t0 = time.time()
+        # Converte as coordenadas 3D dos pontos para as coordenadas de imagem da câmera esquerda e direita
         uv_left = self.transform_gcs2ccs(points_3d, cam_name='left')
         uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
 
-        print('Transform points to image: {} s'.format(round(time.time() - t0), 2))
-
-        t1 = time.time()
-
+        # Realiza a interpolação bicúbica nas imagens das câmeras, retorna o valor interpolado e o desvio padrão da interpolação
         inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
         inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
 
-        print('Bi-Interpolation: {} s'.format(round(time.time() - t1, 2)))
-
-        t2 = time.time()
+        # Cálcula o índice da fase mínima entre s valores interpoados
         phi_min_id = self.phase_map(inter_left, inter_right)
-        measured_pts = points_3d[self.fringe_masks(uv_l = uv_left, uv_r = uv_right, std_l = std_left, std_r = std_right, phi_id = phi_min_id)]
 
-        print('Zscan result dt: {} s'.format(round(time.time() - t2), 2))
+        # Filra os pontos 3D com base no mapa de modularização, os desvios padrões da interpolação e os valores mínimos da fase
+        measured_pts = points_3d[self.fringe_masks(uv_l = uv_left, uv_r = uv_right, std_l = std_left, std_r = std_right, phi_id = phi_min_id)]
 
         if save_points:
             self.save_points(measured_pts, filename='./fringe_points_results_calota.txt')
@@ -624,99 +469,55 @@ class InverseTriangulation:
             self.plot_3d_points(measured_pts[:, 0], measured_pts[:, 1], measured_pts[:, 2], color=None,
                                 title="Fringe process output points")
 
+        # deleta as variáveis temporárias para liberar memória
         del uv_left, uv_right,inter_left, inter_right, std_left, std_right, phi_min_id
         return measured_pts
 
-    # def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
-    #     """
-    #     Zscan for stereo fringe process
-    #     Parameters:
-    #         save_points: boolean to save or not image
-    #         visualize: boolean to visualize result
-    #     :return:
-    #         measured_pts: Valid 3D global coordinate points
-    #     """
-    #
-    #     def process_steps():
-    #         t0 = time.time()
-    #         uv_left = self.transform_gcs2ccs(points_3d, cam_name='left')
-    #         uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
-    #         print('Transform points to image: {} s'.format(round(time.time() - t0), 2))
-    #
-    #         t1 = time.time()
-    #         inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
-    #         inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
-    #         print('Bi-Interpolation: {} s'.format(round(time.time() - t1, 2)))
-    #
-    #         t2 = time.time()
-    #         phi_min_id = self.phase_map(inter_left, inter_right)
-    #         fringe_mask = self.fringe_masks(uv_l=uv_left, uv_r=uv_right, std_l=std_left, std_r=std_right,
-    #                                         phi_id=phi_min_id)
-    #         measured_pts = points_3d[fringe_mask]
-    #         print('Zscan result dt: {} s'.format(round(time.time() - t2), 2))
-    #
-    #         if save_points:
-    #             self.save_points(measured_pts, filename='./sm3_duto.csv')
-    #
-    #         if visualize:
-    #             self.plot_3d_points(measured_pts[:, 0], measured_pts[:, 1], measured_pts[:, 2], color=None,
-    #                                 title="Fringe process output points")
-    #
-    #         return measured_pts
-    #
-    #     # Usar cProfile para medir o desempenho
-    #     profiler = cProfile.Profile()
-    #     profiler.enable()
-    #     measured_pts = process_steps()  # Chamando as etapas principais
-    #     profiler.disable()
-    #
-    #     # Salvar os resultados do profiler em um arquivo
-    #     with open('profile_results.txt', 'w') as f:
-    #         stats = pstats.Stats(profiler, stream=f)
-    #         stats.strip_dirs()
-    #         stats.sort_stats('cumulative')
-    #         stats.print_stats()
-    #
-    #     return measured_pts
+    def filter_points_by_depth(self, points, depth_threshold=0.05, octree_depth=30, std_ratio=0.1, nb_neighbors=300):
+        """
+        Filtra pontos de uma nuvem de pontos 3D com base na profundidade média dentro de blocos da Octree.
 
-    def filter_points_by_depth(self, points, depth_threshold=0.05):
-        # Se 'points' for um array Cupy
+        Parameters:
+            points (cp.ndarray or np.ndarray): Pontos da nuvem de pontos.
+            depth_threshold (float): Tolerância para variação em relação à profundidade média.
+            octree_depth (int): Profundidade máxima da Octree.
+            std_ratio (float): Razão de desvio padrão para o filtro estatístico.
+            nb_neighbors (int): Número de vizinhos para considerar no filtro estatístico.
+
+        Returns:
+            filtered_pcd (open3d.geometry.PointCloud): Nuvem de pontos filtrada.
+        """
+
+        # Converte para NumPy, se necessário
         if isinstance(points, cp.ndarray):
-            points = points.get()  # Converte para NumPy
+            points = cp.asnumpy(points)
 
-        # Converte o numpy array para um objeto PointCloud do Open3D
+        # Cria a PointCloud no Open3D
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points)
 
-        # Cria a octree com base na profundidade, qunado maior mais divisão
-        octree = o3d.geometry.Octree(max_depth=20)
+        # Cria uma Octree para dividir a nuvem em blocos
+        octree = o3d.geometry.Octree(max_depth=octree_depth)
         octree.convert_from_point_cloud(pcd, size_expand=0.01)
 
         filtered_points = []
 
-        # Função para processar os blocos da octree
+        # Função para processar os nós da Octree
         def process_leaf(node, node_info):
-            # Verifica se o nó atual é um bloco
             if isinstance(node, o3d.geometry.OctreeLeafNode):
-                # Obtém os pontos do nó
                 points_in_leaf = np.asarray([pcd.points[idx] for idx in node.indices])
-
-                # Calcula a profundidade média e desvio padrão da coordenada Z
                 mean_depth = np.mean(points_in_leaf[:, 2])
-                std_depth = np.std(points_in_leaf[:, 2])
+                mask = np.abs(points_in_leaf[:, 2] - mean_depth) <= depth_threshold
+                filtered_points.extend(points_in_leaf[mask])
 
-                # Filtra os pontos com base na profundidade media de cada bloco
-                for point in points_in_leaf:
-                    if np.abs(point[2] - mean_depth) <= depth_threshold:
-                        filtered_points.append(point)
-
-        # Processa todos os nós da octree
+        # Percorre a Octree para filtrar os pontos
         octree.traverse(process_leaf)
 
-        # Cria uma nova nuvem de pontos com os pontos filtrados
+        # Converte pontos filtrados para Open3D
         filtered_pcd = o3d.geometry.PointCloud()
-        filtered_pcd.points = o3d.utility.Vector3dVector(filtered_points)
+        filtered_pcd.points = o3d.utility.Vector3dVector(np.array(filtered_points))
 
-        filtered_pcd, ind = pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=1.0)
+        # Filtro estatístico para remover outliers de acordo com número de pixels vizinhos e distãncia
+        filtered_pcd, _ = filtered_pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
 
         return filtered_pcd
