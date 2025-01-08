@@ -106,9 +106,9 @@ def main():
         zscan = InverseTriangulation(yaml_file)
 
         # np.arange (min_val, max_val, step)
-        x_lin = cp.arange(-250, 500, 4)
-        y_lin = cp.arange(-100, 400, 4)
-        z_lin = cp.arange(-500, 100, 2)
+        x_lin = cp.arange(-250, 500, 10)
+        y_lin = cp.arange(-100, 400, 10)
+        z_lin = cp.arange(-500, 100, 0.1)
         num_splits = 10
         x_split = cp.array_split(x_lin, num_splits)
         y_split = cp.array_split(y_lin, num_splits)
@@ -119,8 +119,7 @@ def main():
         for x_arr in x_split:
             for y_arr in y_split:
                 points_3d = zscan.points3D_arrays(x_arr, y_arr, z_lin, visualize=False)
-                # zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left, right_mask=modulation_mask_right)
-                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=False, visualize=False)
+                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=True, visualize=False)
                 points_result.append(z_zcan_points)
                 count += 1
                 print(count)
@@ -128,9 +127,41 @@ def main():
         points_result_ar = cp.concatenate(points_result, axis=0)
         points_result_ar_filtered = zscan.filter_points_by_depth(points_result_ar, depth_threshold=0.001)
         points_result_ar_filtered = np.asarray(points_result_ar_filtered.points)
-        # zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
+
+        # Calcular o máximo e mínimo para cada eixo da nuvem de pontos filtrada
+        x_min, x_max = points_result_ar_filtered[:, 0].min(), points_result_ar_filtered[:, 0].max()
+        y_min, y_max = points_result_ar_filtered[:, 1].min(), points_result_ar_filtered[:, 1].max()
+        z_min, z_max = points_result_ar_filtered[:, 2].min(), points_result_ar_filtered[:, 2].max()
+
+        print(f"Valores para o eixo X (nuvem de pontos): Min = {x_min}, Max = {x_max}")
+        print(f"Valores para o eixo Y (nuvem de pontos): Min = {y_min}, Max = {y_max}")
+        print(f"Valores para o eixo Z (nuvem de pontos): Min = {z_min}, Max = {z_max}")
+
         zscan.plot_3d_points(points_result_ar_filtered[:, 0], points_result_ar_filtered[:, 1],
                              points_result_ar_filtered[:, 2], color=None, title='Filtered Points')
+
+        x_lin_refined = cp.arange(x_min, x_max, 1)
+        y_lin_refined = cp.arange(y_min, y_max, 1)
+        z_lin_refined = cp.arange(z_min, z_max, 0.1)
+        x_split_refined = cp.array_split(x_lin_refined, num_splits)
+        y_split_refined = cp.array_split(y_lin_refined, num_splits)
+        points_result_refined = []
+        count = 0
+        for x_arr_r in x_split_refined:
+            for y_arr_r in y_split_refined:
+                points_3d = zscan.points3D_arrays(x_arr_r, y_arr_r, z_lin_refined, visualize=False)
+                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=True, visualize=False)
+                points_result_refined.append(z_zcan_points)
+                count += 1
+                print(count)
+
+        points_result_refined_ar = cp.concatenate(points_result_refined, axis=0)
+        points_result_refined_ar_filtered = zscan.filter_points_by_depth(points_result_refined_ar, depth_threshold=0.001)
+        points_result_refined_ar_filtered = np.asarray(points_result_refined_ar_filtered.points)
+
+        # zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
+        zscan.plot_3d_points(points_result_refined_ar_filtered[:, 0], points_result_refined_ar_filtered[:, 1],
+                             points_result_refined_ar_filtered[:, 2], color=None, title='Filtered Points')
         print('wait')
 
 if __name__ == '__main__':

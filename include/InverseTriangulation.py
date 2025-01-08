@@ -301,8 +301,8 @@ class InverseTriangulation:
         tran = cp.asarray(self.camera_params[cam_name]['t'])
 
         # Estimate memory required for processing
-        bytes_per_float32 = 8  # Float32 size in bytes
-        memory_per_point = (4 * 3 * bytes_per_float32) + (3 * bytes_per_float32)  # Approx. per point
+        bytes_per_float32 = 8
+        memory_per_point = (4 * 3 * bytes_per_float32) + (3 * bytes_per_float32)
         total_memory_required = self.num_points * memory_per_point
 
         # Adjust batch size based on memory limitations
@@ -479,28 +479,64 @@ class InverseTriangulation:
 
         return interpolated, std
 
-    def phase_map(self,interp_left, interp_right, debug=False):
+    # def phase_map(self,interp_left, interp_right, debug=False):
+    #     """
+    #     Identify minimum phase map value
+    #     Parameters:
+    #         interp_left: left interpolated points
+    #         interp_right: right interpolated points
+    #         debug: if true, visualize phi_map array
+    #     Returns:
+    #         phi_min_id: indices of minimum phase map values.
+    #     """
+    #     phi_map = []
+    #     phi_min_id = []
+    #
+    #     for k in range(self.num_points // self.z_scan_step):
+    #         diff_phi = np.abs(interp_left[self.z_scan_step * k:(k + 1) * self.z_scan_step]
+    #                           - interp_right[self.z_scan_step * k:(k + 1) * self.z_scan_step])
+    #         phi_min_id.append(np.argmin(diff_phi) + k * self.z_scan_step)
+    #         if debug:
+    #             phi_map.append(diff_phi)
+    #     if debug:
+    #         plt.figure()
+    #         plt.plot(phi_map)
+    #         plt.show()
+    #
+    #     return phi_min_id
+
+    def phase_map(self, interp_left, interp_right, debug=False):
         """
-        Identify minimum phase map value
+        Identify minimum phase map value.
         Parameters:
-            interp_left: left interpolated points
-            interp_right: right interpolated points
+            interp_left: left interpolated points (1D array, cupy.ndarray)
+            interp_right: right interpolated points (1D array, cupy.ndarray)
             debug: if true, visualize phi_map array
         Returns:
-            phi_min_id: indices of minimum phase map values.
+            phi_min_id: indices of minimum phase map values (cupy.ndarray).
         """
-        phi_map = []
-        phi_min_id = []
 
-        for k in range(self.num_points // self.z_scan_step):
-            diff_phi = np.abs(interp_left[self.z_scan_step * k:(k + 1) * self.z_scan_step]
-                              - interp_right[self.z_scan_step * k:(k + 1) * self.z_scan_step])
-            phi_min_id.append(np.argmin(diff_phi) + k * self.z_scan_step)
-            if debug:
-                phi_map.append(diff_phi)
+        # Compute the absolute difference between left and right interpolations
+        diff_phi = cp.abs(interp_left - interp_right)
+
+        # Reshape the array for efficient block processing
+        diff_phi_blocks = diff_phi.reshape(-1, self.z_scan_step)
+
+        # Find the indices of minimum values within each block
+        block_min_indices = cp.argmin(diff_phi_blocks, axis=1)
+
+        # Adjust indices to account for the block position
+        phi_min_id = block_min_indices + cp.arange(len(block_min_indices)) * self.z_scan_step
+
+        # Debug: Visualize the phase map if requested
         if debug:
+            # Transfer data back to NumPy for plotting
+            diff_phi_blocks_np = cp.asnumpy(diff_phi_blocks)
             plt.figure()
-            plt.plot(phi_map)
+            plt.plot(diff_phi_blocks_np.T)
+            plt.title("Phase Difference Map")
+            plt.xlabel("Index within block")
+            plt.ylabel("Phase Difference")
             plt.show()
 
         return phi_min_id
@@ -582,7 +618,7 @@ class InverseTriangulation:
         print('Zscan result dt: {} s'.format(round(time.time() - t2), 2))
 
         if save_points:
-            self.save_points(measured_pts, filename='./sm3_duto.csv')
+            self.save_points(measured_pts, filename='./fringe_points_results_calota.txt')
 
         if visualize:
             self.plot_3d_points(measured_pts[:, 0], measured_pts[:, 1], measured_pts[:, 2], color=None,
