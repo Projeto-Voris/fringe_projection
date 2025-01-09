@@ -1,5 +1,4 @@
 import time
-
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
@@ -12,31 +11,57 @@ class inverse_triangulation():
     def __init__(self):
         pass
 
-    def points3d(self, x_lim, y_lim, z_lim, xy_step, z_step, visualize=True):
-        """
-            Create a 3D space of combination from linear arrays of X Y Z
-            Parameters:
-                x_lim: Begin and end of linear space of X
-                y_lim: Begin and end of linear space of Y
-                z_lim: Begin and end of linear space of Z
-                xy_step: Step size between X and Y
-                z_step: Step size between Z and X
-                visualize: Visualize the 3D space
-            Returns:
-                cube_points: combination of X Y and Z
-            """
+    # def points3d(self, x_lim, y_lim, z_lim, xy_step, z_step, visualize=True):
+    #     """
+    #         Create a 3D space of combination from linear arrays of X Y Z
+    #         Parameters:
+    #             x_lim: Begin and end of linear space of X
+    #             y_lim: Begin and end of linear space of Y
+    #             z_lim: Begin and end of linear space of Z
+    #             xy_step: Step size between X and Y
+    #             z_step: Step size between Z and X
+    #             visualize: Visualize the 3D space
+    #         Returns:
+    #             cube_points: combination of X Y and Z
+    #         """
+    #     x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
+    #     y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
+    #     z_lin = np.arange(z_lim[0], z_lim[1], z_step)
+    #
+    #     mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
+    #
+    #     c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
+    #
+    #     if visualize:
+    #         self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
+    #
+    #     return c_points
+
+    def points3d(self, x_lim, y_lim, z_lim, xy_step, delta, z_step, visualize=True):
         x_lin = np.arange(x_lim[0], x_lim[1], xy_step)
         y_lin = np.arange(y_lim[0], y_lim[1], xy_step)
         z_lin = np.arange(z_lim[0], z_lim[1], z_step)
 
-        mg1, mg2, mg3 = np.meshgrid(x_lin, y_lin, z_lin, indexing='ij')
+        delta_x = np.array_split(x_lin, delta)
+        delta_y = np.array_split(y_lin, delta)
 
-        c_points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
+        all_points = []  # Lista para armazenar os pontos
 
-        if visualize:
-            self.plot_3d_points(x=c_points[:, 0], y=c_points[:, 1], z=c_points[:, 2])
+        for i, x_part in enumerate(delta_x):
+            for j, y_part in enumerate(delta_y):
+                mg1, mg2, mg3 = np.meshgrid(x_part, y_part, z_lin, indexing='ij')
+                points = np.stack([mg1, mg2, mg3], axis=-1).reshape(-1, 3)
 
-        return c_points
+
+                all_points.append(points)
+
+                if visualize:
+                    self.plot_3d_points(x=points[:, 0], y=points[:, 1], z=points[:, 2])
+
+                del points  # Libera a memória
+                gc.collect()  # Coleta de lixo para liberar memória
+
+        return np.concatenate(all_points, axis=0)  # Concatenar no final
 
     def plot_3d_points(self, x, y, z, color=None, title='Plot 3D of max correlation points'):
         """
@@ -436,8 +461,8 @@ class inverse_triangulation():
         if SAVE:
             np.savetxt('./fringe_points.txt', filtered_3d_phi, delimiter='\t', fmt='%.3f')
 
-        self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
-                            title="Point Cloud of min phase diff")
+        # self.plot_3d_points(filtered_3d_phi[:, 0], filtered_3d_phi[:, 1], filtered_3d_phi[:, 2], color=None,
+        #                     title="Point Cloud of min phase diff")
 
         self.plot_3d_points(filtered_mask[:, 0], filtered_mask[:, 1], filtered_mask[:, 2], color=None,
                             title="Fringe Mask")

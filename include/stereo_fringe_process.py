@@ -7,6 +7,7 @@ import cv2
 from include.FringePattern import FringePattern
 from include.GrayCode import GrayCode
 
+
 class Stereo_Fringe_Process(GrayCode, FringePattern):
 
     def __init__(self, img_resolution=(1024, 768), camera_resolution=(1600, 1200), px_f=16, steps=4):
@@ -16,7 +17,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         """
 
         self.images_left = np.zeros((camera_resolution[1], camera_resolution[0],
-                                    int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
+                                     int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
         self.images_right = np.zeros((camera_resolution[1], camera_resolution[0],
                                       int(steps + self.min_bits_gc(np.floor(img_resolution[0] / px_f)) + 2)), np.uint8)
         FringePattern.__init__(self, resolution=img_resolution, px_f=px_f, steps=steps)
@@ -40,32 +41,32 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         return math.ceil(math.log2(x) + 1)
 
     def normalize_white(self, mask_left, mask_right):
-        """
-            Calcula a média dos valores máximos dos pixels brancos nas imagens esquerda e direita usando máscaras.
+            """
+                Calcula a média dos valores máximos dos pixels brancos nas imagens esquerda e direita usando máscaras.
 
-            Parameters:
-            -----------
-            mask_left : numpy.ndarray
-                Máscara binária aplicada à imagem esquerda, onde os pixels de interesse são marcados com o valor 255.
+                Parameters:
+                -----------
+                mask_left : numpy.ndarray
+                    Máscara binária aplicada à imagem esquerda, onde os pixels de interesse são marcados com o valor 255.
 
-                mask_right : numpy.ndarray
-                    Máscara binária aplicada à imagem direita, onde os pixels de interesse são marcados com o valor 255.
+                    mask_right : numpy.ndarray
+                        Máscara binária aplicada à imagem direita, onde os pixels de interesse são marcados com o valor 255.
 
-                eturns:
-                --------
-                media_branco_max_left : float
-                    Média dos valores máximos dos pixels brancos na imagem esquerda, calculada a partir da máscara.
+                    eturns:
+                    --------
+                    media_branco_max_left : float
+                        Média dos valores máximos dos pixels brancos na imagem esquerda, calculada a partir da máscara.
 
-                media_branco_max_right : float
-                    Média dos valores máximos dos pixels brancos na imagem direita, calculada a partir da máscara.
-        """
+                    media_branco_max_right : float
+                        Média dos valores máximos dos pixels brancos na imagem direita, calculada a partir da máscara.
+            """
 
-        media_branco_max_left = np.mean(self.images_left[:, :, self.steps][mask_left == 255])
-        media_branco_max_right = np.mean(self.images_right[:, :, self.steps][mask_right == 255])
+            media_branco_max_left = np.mean(self.images_left[:, :, self.steps][mask_left == 255])
+            media_branco_max_right = np.mean(self.images_right[:, :, self.steps][mask_right == 255])
 
-        # print("media dos brancos right:", media_branco_max_right)
+            # print("media dos brancos right:", media_branco_max_right)
 
-        return media_branco_max_left, media_branco_max_right
+            return media_branco_max_left, media_branco_max_right
 
     def set_images(self, image_left, image_right, counter):
         """
@@ -73,38 +74,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         """
         self.images_left[:, :, counter] = image_left
         self.images_right[:, :, counter] = image_right
-
-    def apply_mask_otsu_threshold(self, image):
-        """
-            Aplica Otsu thresholding a cada uma das camadas de uma imagem de múltiplos canais (franjas)
-            e gera uma máscara para separar franjas do fundo.
-            Parameters:
-            -----------
-            image : np.ndarray
-                A imagem com múltiplos canais, onde cada canal é uma imagem com franjas mudando de fase.
-            max_value : int
-                Valor máximo a ser atribuído aos pixels acima do limiar (geralmente 255).
-            Returns:
-            --------
-            mask : np.ndarray
-                A máscara binária resultante após aplicar Otsu thresholding.
-        """
-        # Inicializa a máscara com zeros
-        mask = np.zeros(image.shape[:2], dtype=np.uint8)
-
-        # Aplicar Otsu thresholding a cada camada individualmente
-        for i in range(image.shape[2]):
-            gray_image = image[:, :, i]
-            _, thresh = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            mask = np.maximum(mask, thresh)  # Combinar os thresholdings das camadas para criar a máscara
-
-        # Expandir a máscara para o número de canais da imagem original
-        mask_expanded = np.stack([mask] * image.shape[2], axis=-1)
-
-        # Aplicar a máscara à imagem original
-        masked_image = cv2.bitwise_and(image, image, mask=mask_expanded[:, :, 0])  # Usar apenas a 1ª camada da máscara
-
-        return masked_image
 
     def calculate_phi(self, image, name='Plot', visualize=True):
         """
@@ -128,28 +97,30 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                 ao ângulo Phi calculado para aquele pixel com base nas contribuições de seno e cosseno dos canais.
         """
 
-        # Aplicar a máscara com o otsu threshold
-        masked_image = self.apply_mask_otsu_threshold(image)
-
-        indices = np.arange(1, masked_image.shape[2] + 1)
-        angle = 2 * np.pi * indices / masked_image.shape[2]
+        indices = np.arange(1, image.shape[2] + 1)
+        angle = 2 * np.pi * indices / image.shape[2]
 
         sin_values = np.sin(angle)
         cos_values = np.cos(angle)
 
-        sin_contributions = np.sum(masked_image * sin_values, axis=2)
-        cos_contributions = np.sum(masked_image * cos_values, axis=2)
+        sin_contributions = np.sum(image * sin_values, axis=2)
+        cos_contributions = np.sum(image * cos_values, axis=2)
 
         # Calcular Phi para cada pixel
         phi_image = np.arctan2(-sin_contributions, cos_contributions)
 
-        if visualize:
+        # Calcular o mapa de modulação
+        modulation_map = np.sqrt(sin_contributions ** 2 + cos_contributions ** 2)
 
-            phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))], visualize=False)
-            phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],visualize=False)
+        if visualize:
+            modulation_map_left, phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
+                                                visualize=False)
+            modulation_map_right,phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
+                                                 visualize=False)
 
             qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):], visualize=False)
-            qsi_image_right = self.calculate_qsi(self.images_right[:, :, FringePattern.get_steps(self):], visualize=False)
+            qsi_image_right = self.calculate_qsi(self.images_right[:, :, FringePattern.get_steps(self):],
+                                                 visualize=False)
 
             remaped_qsi_image_left = self.remap_qsi_image(qsi_image_left, GrayCode.get_gc_order_v(self))
             remaped_qsi_image_right = self.remap_qsi_image(qsi_image_right, GrayCode.get_gc_order_v(self))
@@ -172,7 +143,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
             plt.tight_layout()
             plt.show()
 
-        return phi_image
+        return modulation_map, phi_image
 
     def calculate_qsi(self, graycode_image, name='Plot', visualize=True):
         """
@@ -210,7 +181,6 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         qsi_image = np.dot(bit_values, 2 ** np.arange(bit_values.shape[-1])[::-1])
 
         if visualize:
-
             qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):])
             qsi_image_right = self.calculate_qsi(self.images_right[:, :, FringePattern.get_steps(self):])
 
@@ -291,8 +261,10 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
                 `phi_image_right`. Os valores da fase estão em radianos.
         """
         t0 = time.time()
-        phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))], visualize=False)
-        phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))], visualize=False)
+        modulation_map_l, phi_image_left = self.calculate_phi(self.images_left[:, :, :int(FringePattern.get_steps(self))],
+                                            visualize=False)
+        modulation_map_r, phi_image_right = self.calculate_phi(self.images_right[:, :, :int(FringePattern.get_steps(self))],
+                                             visualize=False)
 
         qsi_image_left = self.calculate_qsi(self.images_left[:, :, FringePattern.get_steps(self):], visualize=False)
         qsi_image_right = self.calculate_qsi(self.images_right[:, :, FringePattern.get_steps(self):], visualize=False)
@@ -361,7 +333,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
             plt.tight_layout()
             plt.show()
-        print('Process abs phase: {} dt'.format(round(time.time()-t0,2)))
+        print('Process abs phase: {} dt'.format(round(time.time() - t0, 2)))
         return abs_phi_image_left_remaped, abs_phi_image_right_remaped
 
     def plot_1d_phase(self, ax, phi_image, remaped_qsi_image, title, ylabel):

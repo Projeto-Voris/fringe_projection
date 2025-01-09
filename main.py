@@ -3,10 +3,11 @@ import cv2
 import screeninfo
 import PySpin
 import numpy as np
+import cupy as cp
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
-import inverse_triangulation
 from include.InverseTriangulation import InverseTriangulation
+
 def main():
     VISUALIZE = True
     cv2.namedWindow('projector', cv2.WINDOW_NORMAL)
@@ -16,9 +17,9 @@ def main():
     img_resolution = (width, height)
     pixel_per_fringe = 32
     steps = 8
-    path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
+    # path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
+    path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
-
 
     stereo_ctrl = StereoCameraController(left_serial=16378750, right_serial=16378734)
     print("Models: {}".format(stereo_ctrl.get_model()))
@@ -26,7 +27,7 @@ def main():
 
     for m in screeninfo.get_monitors():
 
-        if m.name == 'DP-3':
+        if m.name == 'DP-1':
             move = (m.x, m.y)
             img_resolution = (m.width, m.height)
 
@@ -38,7 +39,7 @@ def main():
     k = 0
 
     try:
-        stereo_ctrl.set_exposure_time(16666.0)
+        stereo_ctrl.set_exposure_time(1666.0)
         stereo_ctrl.set_exposure_mode(PySpin.ExposureAuto_Off)
         stereo_ctrl.set_gain(0)
         stereo_ctrl.set_image_format(PySpin.PixelFormat_Mono8)
@@ -64,9 +65,8 @@ def main():
 
             if k == 32:
                 stereo.set_images(left_img, right_img, counter=count)
-
-                if stereo_ctrl.save_images(path=path, counter=count):
-                    count += 1
+                # if stereo_ctrl.save_images(path=path, counter=count):
+                count += 1
 
     finally:
         print("Camera closed")
@@ -75,40 +75,79 @@ def main():
         stereo_ctrl.cleanup()
         # stereo.normalize_b_w()
 
-        if k != 27:
-            #     width, height, _ = self.images_left.shape
-            bl = cv2.threshold(stereo.images_left[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-            br = cv2.threshold(stereo.images_right[:, :, 4], 180, 255, cv2.THRESH_BINARY)[1]
-            # stereo.calculate_phi(stereo.images_left[:, :, :int(stereo.get_steps())])
-            white_left, white_right = stereo.normalize_white(bl, br)
-            # plt.imshow(bl, cmap='gray')
-            # plt.show()
-            # plt.imshow(br, cmap='gray')
-            # plt.show()
-            # qsi_left = stereo.calculate_qsi(stereo.images_left[:, :, 8:])
-            # qsi_right = stereo.calculate_qsi(stereo.images_right[:, :, 8:])
-            # stereo.remap_qsi_image(qsi_left, stereo.get_gc_order_v())
-            # stereo.remap_qsi_image(qsi_right, stereo.get_gc_order_v())
-            # stereo.plot_abs_phase_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
-            # stereo.plot_qsi_map(name='Images - px_f:{} - steps:{}'.format(pixel_per_fringe, steps))
-            stereo.calculate_abs_phi_images(visualize=False)
-
-        # Acquired the abs images
+        # Acquired the images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
-        # read the yaml_file
-        yaml_file = '/home/daniel/PycharmProjects/fringe_projection/params/20241018_bouget.yaml'
+        modulation_mask_left = stereo.calculate_phi(stereo.images_left[:, :, :7], visualize=False)[0]
+        modulation_mask_right = stereo.calculate_phi(stereo.images_right[:, :, :7], visualize=False)[0]
 
-        # zscan_1 = inverse_triangulation.inverse_triangulation()
-        # # Acquired the points 3D
-        # points_3d = zscan_1.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
-        # # Interpolated the points and build the point cloud
-        # zscan_1.fringe_zscan(left_images=abs_phi_image_left, right_images=abs_phi_image_right,yaml_file=yaml_file, points_3d=points_3d)
+        # read the yaml_file
+        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241212_calib_daniel.yaml'
 
         # Inverse Triangulation for Fringe projection
         zscan = InverseTriangulation(yaml_file)
-        zscan.points3d(x_lim=(-250, 500), y_lim=(-100, 400), z_lim=(-200, 200), xy_step=7, z_step=0.1, visualize=False)
-        zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right)
-        z_zcan_points = zscan.fringe_process(save_points=False, visualize=True)
+
+        # np.arange (min_val, max_val, step)
+        x_lin = cp.arange(-250, 500, 20)
+        y_lin = cp.arange(-100, 400, 20)
+        z_lin = cp.arange(-500, 100, 0.1)
+
+        # Número de dívisões do espaço
+        num_splits = 10
+
+        # Dívide o espaço em blocos para processamento de cada bloco
+        x_split = cp.array_split(x_lin, num_splits)
+        y_split = cp.array_split(y_lin, num_splits)
+
+        # Lê as imagens de fase absoluto e o mapa de modularização
+        zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left,
+                          right_mask=modulation_mask_right)
+
+        # Lista para o armazenamento do resultado dos processamentos de cada bloco
+        points_result = []
+        count = 0
+        for x_arr in x_split:
+            for y_arr in y_split:
+                points_3d = zscan.points3D_arrays(x_arr, y_arr, z_lin, visualize=False)
+                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=True, visualize=False)
+                points_result.append(z_zcan_points)
+                count += 1
+                print(count)
+
+        # Junção dos resultados de cada bloco
+        points_result_ar = cp.concatenate(points_result, axis=0)
+
+        # Aplicação de filtro com base no processo de octree, onde são descartados pontos que estiverem fora do limite de profundidade e muito distante da média de cada bloco
+        points_result_ar_filtered = zscan.filter_points_by_depth(points_result_ar, depth_threshold=0.001)
+        points_result_ar_filtered = np.asarray(points_result_ar_filtered.points)
+
+        # Calcular o máximo e mínimo para cada eixo da nuvem de pontos filtrada para segundo prcessamento com maior refinamento
+        x_min, x_max = points_result_ar_filtered[:, 0].min(), points_result_ar_filtered[:, 0].max()
+        y_min, y_max = points_result_ar_filtered[:, 1].min(), points_result_ar_filtered[:, 1].max()
+        z_min, z_max = points_result_ar_filtered[:, 2].min(), points_result_ar_filtered[:, 2].max()
+
+        x_lin_refined = cp.arange(x_min, x_max, 1)
+        y_lin_refined = cp.arange(y_min, y_max, 1)
+        z_lin_refined = cp.arange(z_min, z_max, 0.1)
+        x_split_refined = cp.array_split(x_lin_refined, num_splits)
+        y_split_refined = cp.array_split(y_lin_refined, num_splits)
+        points_result_refined = []
+        count = 0
+        for x_arr_r in x_split_refined:
+            for y_arr_r in y_split_refined:
+                points_3d = zscan.points3D_arrays(x_arr_r, y_arr_r, z_lin_refined, visualize=False)
+                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=True, visualize=False)
+                points_result_refined.append(z_zcan_points)
+                count += 1
+                print(count)
+
+        points_result_refined_ar = cp.concatenate(points_result_refined, axis=0)
+        points_result_refined_ar_filtered = zscan.filter_points_by_depth(points_result_refined_ar, depth_threshold=0.001)
+        points_result_refined_ar_filtered = np.asarray(points_result_refined_ar_filtered.points)
+
+        # zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
+        zscan.plot_3d_points(points_result_refined_ar_filtered[:, 0], points_result_refined_ar_filtered[:, 1],
+                             points_result_refined_ar_filtered[:, 2], color=None, title='Filtered Points')
+        print('wait')
 
 if __name__ == '__main__':
     main()
