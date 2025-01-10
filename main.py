@@ -151,9 +151,8 @@ def main():
         points_result_refined_ar_filtered = np.asarray(points_result_refined_ar_filtered.points)
 
         # Salva os pontos em arquivo .txt
-        np.savetxt('fringe_points_results.txt', points_result_refined_ar_filtered, fmt='%.6f', delimiter=' ')
+        # np.savetxt('fringe_points_results.txt', points_result_refined_ar_filtered, fmt='%.6f', delimiter=' ')
 
-        # zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
         zscan.plot_3d_points(points_result_refined_ar_filtered[:, 0], points_result_refined_ar_filtered[:, 1],
                              points_result_refined_ar_filtered[:, 2], color=None, title='Filtered Points')
         print('wait')
