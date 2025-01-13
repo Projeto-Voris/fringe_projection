@@ -44,6 +44,8 @@ def main():
         stereo_ctrl.set_gain(0)
         stereo_ctrl.set_image_format(PySpin.PixelFormat_Mono8)
         stereo_ctrl.start_acquisition()
+        # Configura o trigger nas câmeras
+        stereo_ctrl.configure_trigger()
 
         if VISUALIZE:
             cv2.namedWindow('Stereo', cv2.WINDOW_NORMAL)
@@ -53,27 +55,31 @@ def main():
         n_img = np.concatenate((fringe_images, graycode_images), axis=2)
         num_images = n_img.shape[2]
 
-        while k != 27 and count < num_images:
+        while count < num_images:
+            # Projeta as imagens de franjas e graycode
             cv2.imshow('projector', n_img[:, :, count])
-            k = cv2.waitKey(10)
+            # Delay para projetar a imagem
+            cv2.waitKey(200)
 
-            left_img, right_img = stereo_ctrl.capture_images()
+            # Aguarda o trigger ser ativado para capturar as imagens
+            left_img, right_img = stereo_ctrl.capture_images_with_trigger()
 
             if VISUALIZE:
                 img_concatenate = np.concatenate((left_img, right_img), axis=1)
                 cv2.imshow('Stereo', img_concatenate)
 
-            if k == 32:
-                stereo.set_images(left_img, right_img, counter=count)
-                # if stereo_ctrl.save_images(path=path, counter=count):
-                count += 1
+            # Salva as imagens automaticamente
+            stereo.set_images(left_img, right_img, counter=count)
+            # Salva a imagem no diretório se quiser
+            # if stereo_ctrl.save_images(path=path, counter=count):
+
+            count += 1
 
     finally:
         print("Camera closed")
         cv2.destroyAllWindows()
         stereo_ctrl.stop_acquisition()
         stereo_ctrl.cleanup()
-        # stereo.normalize_b_w()
 
         # Acquired the images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
@@ -108,7 +114,7 @@ def main():
         for x_arr in x_split:
             for y_arr in y_split:
                 points_3d = zscan.points3D_arrays(x_arr, y_arr, z_lin, visualize=False)
-                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=True, visualize=False)
+                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=False, visualize=False)
                 points_result.append(z_zcan_points)
                 count += 1
                 print(count)
@@ -135,7 +141,7 @@ def main():
         for x_arr_r in x_split_refined:
             for y_arr_r in y_split_refined:
                 points_3d = zscan.points3D_arrays(x_arr_r, y_arr_r, z_lin_refined, visualize=False)
-                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=True, visualize=False)
+                z_zcan_points = zscan.fringe_process(points_3d=points_3d, save_points=False, visualize=False)
                 points_result_refined.append(z_zcan_points)
                 count += 1
                 print(count)
@@ -144,7 +150,9 @@ def main():
         points_result_refined_ar_filtered = zscan.filter_points_by_depth(points_result_refined_ar, depth_threshold=0.001)
         points_result_refined_ar_filtered = np.asarray(points_result_refined_ar_filtered.points)
 
-        # zscan.plot_3d_points(points_result_ar[:,0], points_result_ar[:,1], points_result_ar[:,2], color=None, title='Filtered Points')
+        # Salva os pontos em arquivo .txt
+        # np.savetxt('fringe_points_results.txt', points_result_refined_ar_filtered, fmt='%.6f', delimiter=' ')
+
         zscan.plot_3d_points(points_result_refined_ar_filtered[:, 0], points_result_refined_ar_filtered[:, 1],
                              points_result_refined_ar_filtered[:, 2], color=None, title='Filtered Points')
         print('wait')

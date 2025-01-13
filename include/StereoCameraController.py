@@ -2,7 +2,6 @@ import os
 import PySpin
 import cv2
 
-
 class StereoCameraController:
     def __init__(self, left_serial, right_serial):
         self.system = PySpin.System.GetInstance()
@@ -79,26 +78,53 @@ class StereoCameraController:
         self.left_cam.EndAcquisition()
         self.right_cam.EndAcquisition()
 
-    def capture_images(self):
+    def configure_trigger(self):
+        # Configura o modo de trigger para a câmera
+        self.left_cam.TriggerMode.SetValue(PySpin.TriggerMode_On)
+        self.right_cam.TriggerMode.SetValue(PySpin.TriggerMode_On)
+
+        # Define o tipo de trigger como "Software"
+        self.left_cam.TriggerSource.SetValue(PySpin.TriggerSource_Software)
+        self.right_cam.TriggerSource.SetValue(PySpin.TriggerSource_Software)
+
+        # Configura o tipo de disparo (pode ser rising ou falling edge)
+        self.left_cam.TriggerActivation.SetValue(PySpin.TriggerActivation_RisingEdge)
+        self.right_cam.TriggerActivation.SetValue(PySpin.TriggerActivation_RisingEdge)
+
+
+    def capture_images_with_trigger(self):
+        # Dispara o trigger de software
+        self.left_cam.TriggerSoftware()
+        self.right_cam.TriggerSoftware()
+
+        # Captura as imagens
         left_image_result = self.left_cam.GetNextImage()
         right_image_result = self.right_cam.GetNextImage()
+
+        # Verifica se a captura foi bem-sucedida
         if left_image_result.IsIncomplete() or right_image_result.IsIncomplete():
             raise Exception("Image capture incomplete.")
-            # Convert images to BGR8 format
-        self.img_left = self.left_cam.GetNextImage().GetNDArray()
-        self.img_right = self.right_cam.GetNextImage().GetNDArray()
-        left_image_result.Release()
-        right_image_result.Release()
-        return self.img_left, self.img_right
+        else:
+            # Converte para o formato NDArray
+            self.img_left = left_image_result.GetNDArray()
+            self.img_right = right_image_result.GetNDArray()
+
+            # Libera as imagens
+            left_image_result.Release()
+            right_image_result.Release()
+
+            # Print indicando que as imagens foram capturadas com sucesso
+            # print("Imagens capturadas com sucesso!")
+
+            # Retorna as imagens capturadas
+            return self.img_left, self.img_right
 
     def save_images(self, path, counter, img_format='.png'):
         os.makedirs(os.path.join(path, 'left'), exist_ok=True)
         os.makedirs(os.path.join(path, 'right'), exist_ok=True)
         try:
-            cv2.imwrite(os.path.join(os.path.join(path, 'left'), 'L' + str(counter).rjust(3, '0') + img_format),
-                        self.img_left)
-            cv2.imwrite(os.path.join(os.path.join(path, 'right'), 'R' + str(counter).rjust(3, '0') + img_format),
-                        self.img_right)
+            cv2.imwrite(os.path.join(os.path.join(path, 'left'), 'L' + str(counter).rjust(3, '0') + img_format), self.img_left)
+            cv2.imwrite(os.path.join(os.path.join(path, 'right'), 'R' + str(counter).rjust(3, '0') + img_format), self.img_right)
             print('Image {} captured successfully.'.format(counter))
         except PySpin.SpinnakerException as ex:
             print(f"Error: {ex}")
