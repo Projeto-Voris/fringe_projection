@@ -131,6 +131,19 @@ class StereoCameraController:
             return False
         return True
 
+    def camera_resolution(self):
+        if self.cam_list.GetSize() == 0:
+            print("Nenhuma câmera detectada")
+        else:
+            cam = self.cam_list.GetByIndex(0)
+            cam.Init()
+
+            # Obtém resolução da câmera
+            width = cam.Width.GetValue()
+            height = cam.Height.GetValue()
+
+            return width, height
+
     def get_images_left(self):
         return self.img_left
 

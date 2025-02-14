@@ -13,10 +13,10 @@ def main():
     cv2.namedWindow('projector', cv2.WINDOW_NORMAL)
 
     move = (0, 0)
-    width, height = 1024, 1024
+    width, height = 1920, 1080
     img_resolution = (width, height)
-    pixel_per_fringe = 32
-    steps = 8
+    pixel_per_fringe = 128
+    steps = 12
     # path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
@@ -33,13 +33,14 @@ def main():
 
     cv2.setWindowProperty('projector', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.moveWindow('projector', move[0], move[1])
-    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, px_f=pixel_per_fringe, steps=steps)
+    width_cam, height_cam = stereo_ctrl.camera_resolution()
+    cam_resolution = (width_cam, height_cam)
+    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, camera_resolution=cam_resolution, px_f=pixel_per_fringe, steps=steps)
     fringe_images = stereo.get_fr_image()
     graycode_images = stereo.get_gc_images()
-    k = 0
 
     try:
-        stereo_ctrl.set_exposure_time(1666.0)
+        stereo_ctrl.set_exposure_time(16666.0)
         stereo_ctrl.set_exposure_mode(PySpin.ExposureAuto_Off)
         stereo_ctrl.set_gain(0)
         stereo_ctrl.set_image_format(PySpin.PixelFormat_Mono8)
@@ -87,15 +88,15 @@ def main():
         modulation_mask_right = stereo.calculate_phi(stereo.images_right[:, :, :7], visualize=False)[0]
 
         # read the yaml_file
-        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241212_calib_daniel.yaml'
+        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20250115_calib_bouget.yaml'
 
         # Inverse Triangulation for Fringe projection
         zscan = InverseTriangulation(yaml_file)
 
         # np.arange (min_val, max_val, step)
-        x_lin = cp.arange(-250, 500, 20)
+        x_lin = cp.arange(-100, 500, 20)
         y_lin = cp.arange(-100, 400, 20)
-        z_lin = cp.arange(-500, 100, 0.1)
+        z_lin = cp.arange(-100, 50, 0.1)
 
         # Número de dívisões do espaço
         num_splits = 10
@@ -151,7 +152,7 @@ def main():
         points_result_refined_ar_filtered = np.asarray(points_result_refined_ar_filtered.points)
 
         # Salva os pontos em arquivo .txt
-        # np.savetxt('fringe_points_results.txt', points_result_refined_ar_filtered, fmt='%.6f', delimiter=' ')
+        np.savetxt('fringe_points_results.txt', points_result_refined_ar_filtered, fmt='%.6f', delimiter=' ')
 
         zscan.plot_3d_points(points_result_refined_ar_filtered[:, 0], points_result_refined_ar_filtered[:, 1],
                              points_result_refined_ar_filtered[:, 2], color=None, title='Filtered Points')
