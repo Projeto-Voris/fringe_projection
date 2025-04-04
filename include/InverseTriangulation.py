@@ -345,7 +345,7 @@ class InverseTriangulation:
                 mod_p21 = modulation_map[y1, x2]
                 mod_p22 = modulation_map[y2, x2]
 
-                # Check if all corner modulations are above the threshold
+                # Check if all corner modulations are above the threshold - Remove points with less than 1% of the modulation map value
                 if cp.all(cp.array([mod_p11, mod_p12, mod_p21, mod_p22]) < mod_threshold):
                     # If any modulation is below the threshold, discard or adjust interpolation
                     interpolated[i:end, k] = cp.nan # You can replace with NaN or other value
@@ -440,10 +440,9 @@ class InverseTriangulation:
         valid_uv_l = valid_u_l & valid_v_l
         valid_uv_r = valid_u_r & valid_v_r
 
-        # Verifica os pontos válidos nas máscaras (aplica as coordenadas para obter as máscaras)
-        valid_uv_l &= (self.left_mask[uv_l[1, :].clip(0, self.left_mask.shape[0] - 1).astype(int), uv_l[0, :].clip(0, self.left_mask.shape[1] - 1).astype(int)] > (0.2 * cp.max(self.left_mask)))
-
-        valid_uv_r &= (self.right_mask[uv_r[1, :].clip(0, self.right_mask.shape[0] - 1).astype(int), uv_r[0, :].clip(0, self.right_mask.shape[1] - 1).astype(int)] > (0.2 * cp.max(self.right_mask)))
+        # Verifica os pontos válidos nas máscaras (aplica as coordenadas para obter as máscaras) - pontos validos maiores que 7% do valor da modulação
+        valid_uv_l &= (self.left_mask[uv_l[1, :].clip(0, self.left_mask.shape[0] - 1).astype(int), uv_l[0, :].clip(0, self.left_mask.shape[1] - 1).astype(int)] > (0.07 * cp.max(self.left_mask)))
+        valid_uv_r &= (self.right_mask[uv_r[1, :].clip(0, self.right_mask.shape[0] - 1).astype(int), uv_r[0, :].clip(0, self.right_mask.shape[1] - 1).astype(int)] > (0.07 * cp.max(self.right_mask)))
 
         # Combine as verificações dos limites
         valid_uv = valid_uv_r & valid_uv_l
