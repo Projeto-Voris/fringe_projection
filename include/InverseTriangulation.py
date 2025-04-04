@@ -426,6 +426,7 @@ class InverseTriangulation:
         Returns:
              valid_mask: Valid 3D points on image's plane
         """
+
         # converte as coordenadas em um array cupy
         uv_l = cp.asarray(uv_l)
         uv_r = cp.asarray(uv_r)

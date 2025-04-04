@@ -21,6 +21,7 @@ def main():
     # path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
+
     # Linear coefficient of the intensity curve
     a = 4.321550244843612
     b = -338.21729940325355
