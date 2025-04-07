@@ -7,7 +7,6 @@ import cupy as cp
 from include.stereo_fringe_process import Stereo_Fringe_Process
 from include.StereoCameraController import StereoCameraController
 from include.InverseTriangulation import InverseTriangulation
-import matplotlib.pyplot as plt
 
 def main():
     VISUALIZE = True
@@ -46,20 +45,6 @@ def main():
     lut = np.clip((np.arange(256) - b) / a, 0, 255).astype(np.uint8)
     fringe_images = cv2.LUT(stereo.get_fr_image(), lut)
     graycode_images = cv2.LUT(stereo.get_gc_images(), lut)
-
-    # Visualizar o grafico das ondas senoidas projetadas
-    # Pegue os valores de intensidade da linha escolhida
-    linha_valores = fringe_images[600, 200:300, 0]
-
-    # Plote o gráfico
-    plt.figure(figsize=(10, 4))
-    plt.plot(linha_valores, label=f"Linha {600}", color='b')
-    plt.xlabel("Posição na linha")
-    plt.ylabel("Intensidade")
-    plt.title("Perfil de Intensidade de uma Linha da Imagem")
-    plt.legend()
-    plt.grid()
-    plt.show()
 
     try:
         stereo_ctrl.set_exposure_time(16666.0)
@@ -104,23 +89,6 @@ def main():
         cv2.destroyAllWindows()
         stereo_ctrl.stop_acquisition()
         stereo_ctrl.cleanup()
-
-        # Visualizar o grafico das linhas senoidas capturadas
-
-        # Pegue os valores de intensidade da linha escolhida
-        linha_left = stereo.images_left[600, :, 12]
-        linha_right = stereo.images_right[600, :, 12]
-
-        # Plote o gráfico
-        plt.figure(figsize=(10, 4))
-        plt.plot(linha_left, label=f"linha_left", color='b')
-        plt.plot(linha_right, label=f"linha_right", color='r')
-        plt.xlabel("Posição na linha")
-        plt.ylabel("Intensidade")
-        plt.title("Perfil de Intensidade de uma Linha da Imagem")
-        plt.legend()
-        plt.grid()
-        plt.show()
 
         # Acquired the images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
