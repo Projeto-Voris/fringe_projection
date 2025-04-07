@@ -91,6 +91,19 @@ class StereoCameraController:
         self.left_cam.TriggerActivation.SetValue(PySpin.TriggerActivation_RisingEdge)
         self.right_cam.TriggerActivation.SetValue(PySpin.TriggerActivation_RisingEdge)
 
+    def capture_images(self):
+        left_image_result = self.left_cam.GetNextImage()
+        right_image_result = self.right_cam.GetNextImage()
+
+        # Verifica se a captura foi bem-sucedida
+        if left_image_result.IsIncomplete() or right_image_result.IsIncomplete():
+            raise Exception("Image capture incomplete.")
+        # Convert images to BGR8 format
+        self.img_left = self.left_cam.GetNextImage().GetNDArray()
+        self.img_right = self.right_cam.GetNextImage().GetNDArray()
+        left_image_result.Release()
+        right_image_result.Release()
+        return self.img_left, self.img_right
 
     def capture_images_with_trigger(self):
         # Dispara o trigger de software
@@ -130,6 +143,19 @@ class StereoCameraController:
             print(f"Error: {ex}")
             return False
         return True
+
+    def camera_resolution(self):
+        if self.cam_list.GetSize() == 0:
+            print("Nenhuma câmera detectada")
+        else:
+            cam = self.cam_list.GetByIndex(0)
+            cam.Init()
+
+            # Obtém resolução da câmera
+            width = cam.Width.GetValue()
+            height = cam.Height.GetValue()
+
+            return width, height
 
     def get_images_left(self):
         return self.img_left

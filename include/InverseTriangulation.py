@@ -4,16 +4,16 @@ import yaml
 import matplotlib.pyplot as plt
 import gc
 from cupyx.fallback_mode.fallback import ndarray
+import cv2
 import open3d as o3d
 
 class InverseTriangulation:
     def __init__(self, yaml_file):
 
-        self.yaml_file = yaml_file
-        self.left_images = ndarray([])
-        self.right_images = ndarray([])
-        self.left_mask = ndarray([])
-        self.right_mask = ndarray([])
+        self.left_images = cp.array([])
+        self.right_images = cp.array([])
+        self.left_mask = cp.array([])
+        self.right_mask = cp.array([])
 
         # Initialize all camera parameters in a single nested dictionary
         self.camera_params = {
@@ -22,7 +22,7 @@ class InverseTriangulation:
             'stereo': {'R': np.array([]), 'T': np.array([])}
         }
 
-        self.read_yaml_file()
+        self.read_yaml_file(yaml_file)
 
         self.z_scan_step = None
         self.num_points = None
@@ -30,6 +30,28 @@ class InverseTriangulation:
 
         # self.uv_left = []
         # self.uv_right = []
+
+    def read_yaml_file(self, yaml_file):
+        """
+        Read YAML file to extract cameras parameters
+        """
+        # Load the YAML file
+        with open(yaml_file) as file:  # Replace with your file path
+            params = yaml.safe_load(file)
+
+            # Parse the matrices
+        self.camera_params['left']['kk'] = np.array(params['camera_matrix_left'], dtype=np.float64)
+        self.camera_params['left']['kc'] = np.array(params['dist_coeffs_left'], dtype=np.float64)
+        self.camera_params['left']['r'] = np.array(params['rot_matrix_left'], dtype=np.float64)
+        self.camera_params['left']['t'] = np.array(params['t_left'], dtype=np.float64)
+
+        self.camera_params['right']['kk'] = np.array(params['camera_matrix_right'], dtype=np.float64)
+        self.camera_params['right']['kc'] = np.array(params['dist_coeffs_right'], dtype=np.float64)
+        self.camera_params['right']['r'] = np.array(params['rot_matrix_right'], dtype=np.float64)
+        self.camera_params['right']['t'] = np.array(params['t_right'], dtype=np.float64)
+
+        self.camera_params['stereo']['R'] = np.array(params['R'], dtype=np.float64)
+        self.camera_params['stereo']['T'] = np.array(params['T'], dtype=np.float64)
 
     def read_images(self, left_imgs, right_imgs, left_mask, right_mask):
         if len(left_imgs) != len(right_imgs):
@@ -116,28 +138,6 @@ class InverseTriangulation:
         ax.set_aspect('equal', adjustable='box')
         plt.show()
 
-    def read_yaml_file(self):
-        """
-        Read YAML file to extract cameras parameters
-        """
-        # Load the YAML file
-        with open(self.yaml_file) as file:  # Replace with your file path
-            params = yaml.safe_load(file)
-
-            # Parse the matrices
-        self.camera_params['left']['kk'] = np.array(params['camera_matrix_left'], dtype=np.float64)
-        self.camera_params['left']['kc'] = np.array(params['dist_coeffs_left'], dtype=np.float64)
-        self.camera_params['left']['r'] = np.array(params['rot_matrix_left'], dtype=np.float64)
-        self.camera_params['left']['t'] = np.array(params['t_left'], dtype=np.float64)
-
-        self.camera_params['right']['kk'] = np.array(params['camera_matrix_right'], dtype=np.float64)
-        self.camera_params['right']['kc'] = np.array(params['dist_coeffs_right'], dtype=np.float64)
-        self.camera_params['right']['r'] = np.array(params['rot_matrix_right'], dtype=np.float64)
-        self.camera_params['right']['t'] = np.array(params['t_right'], dtype=np.float64)
-
-        # self.camera_params['stereo']['R'] = np.array(params['R'], dtype=np.float64)
-        # self.camera_params['stereo']['T'] = np.array(params['T'], dtype=np.float64)
-
     def save_points(self, data, filename, delimiter=','):
         """
         Save a 2D NumPy array to a CSV file.
@@ -161,7 +161,10 @@ class InverseTriangulation:
         # Convert bytes to GB
         return total_memory / (1024 ** 3)
 
-    def transform_gcs2ccs(self, points_3d, cam_name):
+    def remove_img_distortion(self, img, camera):
+        return cv2.undistort(img, self.camera_params[camera]['kk'], self.camera_params[camera]['kc'])
+
+    def transform_gcs2ccs(self, points_3d, cam_name, undist=False):
         """
         Transform Global Coordinate System (xg, yg, zg)
         to Camera's Coordinate System (xc, yc, zc) and transform to Image's plane (uv)
@@ -181,12 +184,15 @@ class InverseTriangulation:
         total_memory_required = self.num_points * memory_per_point
 
         # Adjust batch size based on memory limitations
-        free_mem, _ = cp.cuda.Device().mem_info
-        points_per_batch = int(free_mem // memory_per_point)
-        points_per_batch = max(points_per_batch, 1)  # Ensure at least one point per batch
+        if total_memory_required > self.max_gpu_usage * 1024 ** 3:
+            points_per_batch = int(
+                (self.max_gpu_usage * 1024 ** 3 // memory_per_point) // 10)  # Reduce batch size more aggressively
+            # print(f"Processing {points_per_batch} points per batch due to memory limitations.")
+        else:
+            points_per_batch = self.num_points  # Process all points at once
 
         # Initialize a list to store results on the GPU
-        uv_points_list = []
+        uv_points_list = cp.empty((2, xyz_gcs.shape[0]), dtype=np.float32)
 
         # Process points in batches
         for i in range(0, self.num_points, points_per_batch):
@@ -194,42 +200,46 @@ class InverseTriangulation:
             xyz_gcs_batch = xyz_gcs[i:end]
 
             # Add one extra line of ones to the global coordinates
-            ones = cp.ones((xyz_gcs_batch.shape[0], 1), dtype=cp.float16)
+            ones = cp.ones((xyz_gcs_batch.shape[0], 1), dtype=cp.float32)
             xyz_gcs_1 = cp.hstack((xyz_gcs_batch, ones))
 
             # Create the rotation and translation matrix
             rt_matrix = cp.vstack(
-                (cp.hstack((rot, tran[:, None])), cp.array([0, 0, 0, 1], dtype=cp.float16))
+                (cp.hstack((rot, tran[:, None])), cp.array([0, 0, 0, 1], dtype=cp.float32))
             )
 
             # Multiply the RT matrix with global points [X; Y; Z; 1]
             xyz_ccs = cp.dot(rt_matrix, xyz_gcs_1.T)
+            del xyz_gcs_1
 
             # Normalize by dividing by Z to get normalized image coordinates
             epsilon = 1e-10  # Small value to prevent division by zero
             xyz_ccs_norm = cp.hstack(
                 (xyz_ccs[:2, :].T / cp.maximum(xyz_ccs[2, :, cp.newaxis], epsilon),
-                 cp.ones((xyz_ccs.shape[1], 1), dtype=cp.float16))
+                 cp.ones((xyz_ccs.shape[1], 1), dtype=cp.float32))
             ).T
+            del xyz_ccs
 
             # Apply distortion using the GPU
-            xyz_ccs_norm_dist = self.undistorted_points(xyz_ccs_norm.T, dist)
+            if undist:
+                xyz_ccs_norm_dist = self.undistorted_points(xyz_ccs_norm.T, dist)
+                del xyz_ccs_norm  # Free memory
+                uv_points_batch = cp.dot(k, xyz_ccs_norm_dist.T).astype(cp.float32)
+                del xyz_ccs_norm_dist  # Free memory
+            else:
+                # Compute image points using the intrinsic matrix K
+                uv_points_batch = cp.dot(k, xyz_ccs_norm).astype(cp.float32)
+                del xyz_ccs_norm  # Free memory
 
-            # Compute image points using the intrinsic matrix K
-            uv_points_batch = cp.dot(k, xyz_ccs_norm_dist.T)
-
-            # Store results in GPU memory
-            uv_points_list.append(uv_points_batch)
+            # Transfer results back to CPU after processing each batch
+            uv_points_list[:, i:end] = uv_points_batch[:2, :]
 
             # Free GPU memory after processing each batch
             cp.get_default_memory_pool().free_all_blocks()
             gc.collect()
 
-        # Concatenate all batches on the GPU
-        uv_points = cp.hstack(uv_points_list)
-
         # Transfer final result to CPU in a single operation
-        return cp.asnumpy(uv_points[:2, :]).astype(cp.float16)
+        return uv_points_list
 
     def undistorted_points(self, points, dist):
         """
@@ -272,7 +282,7 @@ class InverseTriangulation:
 
         return distorted_points
 
-    def bi_interpolation(self, images, uv_points, window_size=3):
+    def bi_interpolation(self, images, modulation_map, uv_points, window_size=3):
         """
         Perform bilinear interpolation on a stack of images at specified uv_points on the GPU.
 
@@ -292,6 +302,8 @@ class InverseTriangulation:
         """
         images = cp.asarray(images)
         uv_points = cp.asarray(uv_points)
+        mod_threshold = 0.01 * cp.max(modulation_map)
+        mod_threshold = cp.float64(mod_threshold)
 
         if len(images.shape) == 2:  # Convert single image to a stack with one image
             images = images[:, :, cp.newaxis]
@@ -303,16 +315,16 @@ class InverseTriangulation:
         points_per_batch = max(1, int(self.max_gpu_usage * 1024 ** 3 // memory_per_point))
 
         # Output arrays on GPU
-        interpolated = cp.zeros((self.num_points, num_images), dtype=cp.float16)
-        std = cp.zeros((self.num_points, num_images), dtype=cp.float16)
+        interpolated = cp.zeros((self.num_points, num_images), dtype=cp.float32)
+        std = cp.zeros((self.num_points, num_images), dtype=cp.float32)
 
         for i in range(0, self.num_points, points_per_batch):
             end = min(i + points_per_batch, self.num_points)
             uv_batch = uv_points[:, i:end]
 
             # Compute integer and fractional parts of UV coordinates
-            x = uv_batch[0].astype(cp.int32)
-            y = uv_batch[1].astype(cp.int32)
+            x = uv_batch[0].astype(cp.float32)
+            y = uv_batch[1].astype(cp.float32)
 
             x1 = cp.clip(cp.floor(x).astype(cp.int32), 0, width - 1)
             y1 = cp.clip(cp.floor(y).astype(cp.int32), 0, height - 1)
@@ -328,22 +340,34 @@ class InverseTriangulation:
                 p21 = images[y1, x2, k]  # Top-right
                 p22 = images[y2, x2, k]  # Bottom-right
 
-                # Bilinear interpolation
-                interpolated_batch = (
-                        p11 * (1 - x_diff) * (1 - y_diff) +
-                        p21 * x_diff * (1 - y_diff) +
-                        p12 * (1 - x_diff) * y_diff +
-                        p22 * x_diff * y_diff
-                )
+                mod_p11 = modulation_map[y1, x1]
+                mod_p12 = modulation_map[y2, x1]
+                mod_p21 = modulation_map[y1, x2]
+                mod_p22 = modulation_map[y2, x2]
 
-                std_batch = cp.std(cp.vstack([p11, p12, p21, p22]), axis=0)
+                # Check if all corner modulations are above the threshold - Remove points with less than 1% of the modulation map value
+                if cp.all(cp.array([mod_p11, mod_p12, mod_p21, mod_p22]) < mod_threshold):
+                    # If any modulation is below the threshold, discard or adjust interpolation
+                    interpolated[i:end, k] = cp.nan # You can replace with NaN or other value
+                    std[i:end, k] = cp.nan  # Reset the standard deviation too
+                else:
+                    # Bilinear interpolation
+                    interpolated_batch = (
+                            p11 * (1 - x_diff) * (1 - y_diff) +
+                            p21 * x_diff * (1 - y_diff) +
+                            p12 * (1 - x_diff) * y_diff +
+                            p22 * x_diff * y_diff)
 
-                # Store results in GPU arrays
-                interpolated[i:end, k] = interpolated_batch
-                std[i:end, k] = std_batch
-            del p11, p12, p21, p22, std_batch, interpolated_batch
-        cp.get_default_memory_pool().free_all_blocks()
-        gc.collect()
+                    std_batch = cp.std(cp.vstack([p11, p12, p21, p22]), axis=0)
+
+                    # Store results in GPU arrays
+                    interpolated[i:end, k] = interpolated_batch
+                    std[i:end, k] = std_batch
+
+                    del p11, p12, p21, p22, std_batch, interpolated_batch
+
+                cp.get_default_memory_pool().free_all_blocks()
+                gc.collect()
         # Convert results to CPU
         # interpolated_cpu = cp.asnumpy(interpolated_gpu)
         # std_cpu = cp.asnumpy(std_gpu)
@@ -390,7 +414,7 @@ class InverseTriangulation:
 
         return phi_min_id
 
-    def fringe_masks(self, uv_l, uv_r, std_l, std_r, phi_id, min_thresh=-0.01, max_thresh=1.01):
+    def fringe_masks(self, uv_l, uv_r, std_l, std_r, phi_id, min_thresh=0, max_thresh=0.12, window_size=3):
         """
         Mask from fringe process to remove outbounds points.
         Paramenters:
@@ -402,6 +426,7 @@ class InverseTriangulation:
         Returns:
              valid_mask: Valid 3D points on image's plane
         """
+
         # converte as coordenadas em um array cupy
         uv_l = cp.asarray(uv_l)
         uv_r = cp.asarray(uv_r)
@@ -416,12 +441,9 @@ class InverseTriangulation:
         valid_uv_l = valid_u_l & valid_v_l
         valid_uv_r = valid_u_r & valid_v_r
 
-        # Verifica os pontos válidos nas máscaras (aplica as coordenadas para obter as máscaras)
-        valid_uv_l &= (self.left_mask[uv_l[1, :].clip(0, self.left_mask.shape[0] - 1).astype(int),
-                uv_l[0, :].clip(0, self.left_mask.shape[1] - 1).astype(int)] > 0)
-
-        valid_uv_r &= (self.right_mask[uv_r[1, :].clip(0, self.right_mask.shape[0] - 1).astype(int),
-                uv_r[0, :].clip(0, self.right_mask.shape[1] - 1).astype(int)] > 0)
+        # Verifica os pontos válidos nas máscaras (aplica as coordenadas para obter as máscaras) - pontos validos maiores que 7% do valor da modulação
+        valid_uv_l &= (self.left_mask[uv_l[1, :].clip(0, self.left_mask.shape[0] - 1).astype(int), uv_l[0, :].clip(0, self.left_mask.shape[1] - 1).astype(int)] > (0.07 * cp.max(self.left_mask)))
+        valid_uv_r &= (self.right_mask[uv_r[1, :].clip(0, self.right_mask.shape[0] - 1).astype(int), uv_r[0, :].clip(0, self.right_mask.shape[1] - 1).astype(int)] > (0.07 * cp.max(self.right_mask)))
 
         # Combine as verificações dos limites
         valid_uv = valid_uv_r & valid_uv_l
@@ -435,8 +457,19 @@ class InverseTriangulation:
         valid_r = (min_thresh < std_r) & (std_r < max_thresh)
         valid_std = valid_r[:, 0] & valid_l[:, 0]
 
+        std_mod_l = cp.std(self.left_mask)
+        std_mod_r = cp.std(self.right_mask)
+
+        mod_threshold_l = 0.3 * cp.max(self.left_mask)
+        mod_threshold_r = 0.3 * cp.max(self.right_mask)
+
+        valid_mod_l = (0 < std_mod_l) & (std_mod_l < mod_threshold_l)
+        valid_mod_r = (0 < std_mod_r) & (std_mod_r < mod_threshold_r)
+        valid_mod = valid_mod_l & valid_mod_r
+
         # Retorne a máscara final considerando os pontos válidos em `uv`, `phi` e `std`
-        mask = valid_uv & phi_mask & valid_std
+        mask = valid_uv & phi_mask & valid_std & valid_mod
+
         return mask
 
     def fringe_process(self, points_3d: ndarray, save_points: bool = True, visualize: bool = False) -> ndarray:
@@ -453,8 +486,8 @@ class InverseTriangulation:
         uv_right = self.transform_gcs2ccs(points_3d, cam_name='right')
 
         # Realiza a interpolação bicúbica nas imagens das câmeras, retorna o valor interpolado e o desvio padrão da interpolação
-        inter_left, std_left = self.bi_interpolation(self.left_images, uv_left)
-        inter_right, std_right = self.bi_interpolation(self.right_images, uv_right)
+        inter_left, std_left = self.bi_interpolation(self.left_images, self.left_mask,uv_left)
+        inter_right, std_right = self.bi_interpolation(self.right_images, self.right_mask,uv_right)
 
         # Cálcula o índice da fase mínima entre s valores interpoados
         phi_min_id = self.phase_map(inter_left, inter_right)

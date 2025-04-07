@@ -13,15 +13,19 @@ def main():
     cv2.namedWindow('projector', cv2.WINDOW_NORMAL)
 
     move = (0, 0)
-    width, height = 1024, 1024
+    width, height = 1920, 1080
     img_resolution = (width, height)
-    pixel_per_fringe = 32
+    pixel_per_fringe = 64
     steps = 8
     # path = '/home/daniel/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     path = '/home/bianca/PycharmProjects/fringe_projection/images/pixel_per_fringe_{}_{}'.format(pixel_per_fringe, steps)
     os.makedirs(path, exist_ok=True)
 
-    stereo_ctrl = StereoCameraController(left_serial=16378750, right_serial=16378734)
+    # Linear coefficient of the intensity curve
+    a = 4.321550244843612
+    b = -338.21729940325355
+
+    stereo_ctrl = StereoCameraController(left_serial=16378750, right_serial=16378749)
     print("Models: {}".format(stereo_ctrl.get_model()))
     print("Serial: {}".format(stereo_ctrl.get_serial_numbers()))
 
@@ -33,13 +37,17 @@ def main():
 
     cv2.setWindowProperty('projector', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.moveWindow('projector', move[0], move[1])
-    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, px_f=pixel_per_fringe, steps=steps)
-    fringe_images = stereo.get_fr_image()
-    graycode_images = stereo.get_gc_images()
-    k = 0
+    width_cam, height_cam = stereo_ctrl.camera_resolution()
+    cam_resolution = (width_cam, height_cam)
+    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, camera_resolution=cam_resolution, px_f=pixel_per_fringe, steps=steps)
+
+    # Criar LUT baseada na relação linear
+    lut = np.clip((np.arange(256) - b) / a, 0, 255).astype(np.uint8)
+    fringe_images = cv2.LUT(stereo.get_fr_image(), lut)
+    graycode_images = cv2.LUT(stereo.get_gc_images(), lut)
 
     try:
-        stereo_ctrl.set_exposure_time(1666.0)
+        stereo_ctrl.set_exposure_time(16666.0)
         stereo_ctrl.set_exposure_mode(PySpin.ExposureAuto_Off)
         stereo_ctrl.set_gain(0)
         stereo_ctrl.set_image_format(PySpin.PixelFormat_Mono8)
@@ -47,12 +55,13 @@ def main():
         # Configura o trigger nas câmeras
         stereo_ctrl.configure_trigger()
 
+
         if VISUALIZE:
             cv2.namedWindow('Stereo', cv2.WINDOW_NORMAL)
             cv2.resizeWindow('Stereo', 1600, 600)
 
         count = 0
-        n_img = np.concatenate((fringe_images, graycode_images), axis=2)
+        n_img = np.concatenate((graycode_images, fringe_images), axis=2)
         num_images = n_img.shape[2]
 
         while count < num_images:
@@ -83,19 +92,21 @@ def main():
 
         # Acquired the images
         abs_phi_image_left, abs_phi_image_right = stereo.calculate_abs_phi_images(visualize=False)
-        modulation_mask_left = stereo.calculate_phi(stereo.images_left[:, :, :7], visualize=False)[0]
-        modulation_mask_right = stereo.calculate_phi(stereo.images_right[:, :, :7], visualize=False)[0]
+        modulation_mask_left = stereo.calculate_phi(stereo.images_left[:, :, stereo.n_min_bits:], visualize=False)[0]
+        modulation_mask_right = stereo.calculate_phi(stereo.images_right[:, :, stereo.n_min_bits:], visualize=False)[0]
 
         # read the yaml_file
-        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/20241212_calib_daniel.yaml'
+        yaml_file = '/home/bianca/PycharmProjects/fringe_projection/Params/calib_20250310.yaml'
 
         # Inverse Triangulation for Fringe projection
         zscan = InverseTriangulation(yaml_file)
+        abs_phi_image_left_undistorted = zscan.remove_img_distortion(abs_phi_image_left, 'left')
+        abs_phi_image_right_undistorted = zscan.remove_img_distortion(abs_phi_image_right, 'right')
 
         # np.arange (min_val, max_val, step)
-        x_lin = cp.arange(-250, 500, 20)
-        y_lin = cp.arange(-100, 400, 20)
-        z_lin = cp.arange(-500, 100, 0.1)
+        x_lin = cp.arange(-500, 500, 10)
+        y_lin = cp.arange(-500, 500, 10)
+        z_lin = cp.arange(-500, 500, 0.1)
 
         # Número de dívisões do espaço
         num_splits = 10
@@ -105,7 +116,7 @@ def main():
         y_split = cp.array_split(y_lin, num_splits)
 
         # Lê as imagens de fase absoluto e o mapa de modularização
-        zscan.read_images(left_imgs=abs_phi_image_left, right_imgs=abs_phi_image_right, left_mask=modulation_mask_left,
+        zscan.read_images(left_imgs=abs_phi_image_left_undistorted, right_imgs=abs_phi_image_right_undistorted, left_mask=modulation_mask_left,
                           right_mask=modulation_mask_right)
 
         # Lista para o armazenamento do resultado dos processamentos de cada bloco
@@ -121,19 +132,25 @@ def main():
 
         # Junção dos resultados de cada bloco
         points_result_ar = cp.concatenate(points_result, axis=0)
+        points_result_ar_filtered = np.asarray(points_result_ar.get())
 
-        # Aplicação de filtro com base no processo de octree, onde são descartados pontos que estiverem fora do limite de profundidade e muito distante da média de cada bloco
-        points_result_ar_filtered = zscan.filter_points_by_depth(points_result_ar, depth_threshold=0.001)
-        points_result_ar_filtered = np.asarray(points_result_ar_filtered.points)
+        zscan.plot_3d_points(points_result_ar_filtered[:, 0], points_result_ar_filtered[:, 1],
+                             points_result_ar_filtered[:, 2], color=None, title='Filtered Points')
 
         # Calcular o máximo e mínimo para cada eixo da nuvem de pontos filtrada para segundo prcessamento com maior refinamento
         x_min, x_max = points_result_ar_filtered[:, 0].min(), points_result_ar_filtered[:, 0].max()
         y_min, y_max = points_result_ar_filtered[:, 1].min(), points_result_ar_filtered[:, 1].max()
+        # definir um incremento fixo
+        d = 20
         z_min, z_max = points_result_ar_filtered[:, 2].min(), points_result_ar_filtered[:, 2].max()
+        print(f"new_z1 min: {z_min}, new_z1 max: {z_max}")
+        z_min = z_min - d if z_min < 0 else z_min + d
+        z_max = z_max + d if z_max < 0 else z_max - d
+        print(f"new_z min: {z_min}, new_z max: {z_max}")
 
         x_lin_refined = cp.arange(x_min, x_max, 1)
         y_lin_refined = cp.arange(y_min, y_max, 1)
-        z_lin_refined = cp.arange(z_min, z_max, 0.1)
+        z_lin_refined = cp.arange(z_min, z_max, 0.01)
         x_split_refined = cp.array_split(x_lin_refined, num_splits)
         y_split_refined = cp.array_split(y_lin_refined, num_splits)
         points_result_refined = []
@@ -151,10 +168,11 @@ def main():
         points_result_refined_ar_filtered = np.asarray(points_result_refined_ar_filtered.points)
 
         # Salva os pontos em arquivo .txt
-        # np.savetxt('fringe_points_results.txt', points_result_refined_ar_filtered, fmt='%.6f', delimiter=' ')
+        np.savetxt('fringe_points_results_20250403.txt', points_result_refined_ar_filtered, fmt='%.8f', delimiter=' ')
 
         zscan.plot_3d_points(points_result_refined_ar_filtered[:, 0], points_result_refined_ar_filtered[:, 1],
                              points_result_refined_ar_filtered[:, 2], color=None, title='Filtered Points')
+
         print('wait')
 
 if __name__ == '__main__':
