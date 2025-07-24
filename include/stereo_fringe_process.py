@@ -1,12 +1,16 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '')))
+
 import time
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from include.FringePattern import FringePattern
-from include.GrayCode import GrayCode
+from FringePattern import FringePattern
+from GrayCode import GrayCode
 
 
-class Stereo_Fringe_Process(GrayCode, FringePattern):
+class FringeProcess(GrayCode, FringePattern):
 
     def __init__(self, img_resolution=(1920, 1080), camera_resolution=(1600, 1200), px_f=12, steps=12):
         """
@@ -172,7 +176,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
         # Comparar os bits relevantes com o branco correspondente
         bit_values = graycode_image[:, :, 2:] / white_value[:, :, None]
-        bit_values = (bit_values > 0.8).astype(int)
+        bit_values = (bit_values > 0.5).astype(int)
         # bit_values = (bit_values > 0.5).astype(int)
 
         # Converter cada linha de bits em um único número inteiro
@@ -232,7 +236,7 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
 
         return remapped_qsi_image
 
-    def calculate_abs_phi_images(self, name='Plot', visualize=True):
+    def calculate_abs_phi_images(self, name='Plot', visualize=True, save=False):
         """
             Calcula as imagens de fase absoluta (phi) para os conjuntos de imagens esquerda e direita.
 
@@ -302,16 +306,8 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
         abs_phi_image_right[mask_right3] = phi_image_right[mask_right3] + 2 * np.pi * (
                 np.floor((remaped_qsi_image_right[mask_right3] + 1) / 2) - 1) + np.pi
 
-        # min_value = np.min(abs_phi_image_left)
-        # max_value = np.max(abs_phi_image_left)
-        # abs_phi_image_left_remaped = 255 * (abs_phi_image_left - min_value) / (max_value - min_value)
-        #
-        # min_value_r = np.min(abs_phi_image_right)
-        # max_value_r = np.max(abs_phi_image_right)
-        # abs_phi_image_right_remaped = 255 * (abs_phi_image_right - min_value_r) / (max_value_r - min_value_r)
-
         if visualize:
-            fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+            fig, axes = plt.subplots(3, 2, figsize=(10, 8))
 
             middle_index_left = int(self.images_left.shape[1] / 2)
             middle_index_right = int(self.images_right.shape[1] / 2)
@@ -327,14 +323,17 @@ class Stereo_Fringe_Process(GrayCode, FringePattern):
             self.plot_2d_image(axes[1, 0], abs_phi_image_left, 'Abs Phi Image left 2D')
             self.plot_2d_image(axes[1, 1], abs_phi_image_right, 'Abs Phi Image right 2D')
 
-            plt.savefig("gráfico_mapa_de_fase.png", dpi=300, bbox_inches='tight')
+            self.plot_2d_image(axes[2, 0], modulation_map_l, 'Modulation Map left', cmap='jet')
+            self.plot_2d_image(axes[2, 1], modulation_map_r, 'Modulation Map right', cmap='jet')
+            if save:
+                plt.savefig("gráfico_mapa_de_fase.png", dpi=300, bbox_inches='tight')
 
             fig.suptitle('Fase absoluta {}'.format(name))
 
             plt.tight_layout()
             plt.show()
         print('Process abs phase: {} dt'.format(round(time.time() - t0, 2)))
-        return abs_phi_image_left, abs_phi_image_right
+        return abs_phi_image_left, abs_phi_image_right, modulation_map_l, modulation_map_r
 
     def plot_1d_phase(self, ax, phi_image, remaped_qsi_image, title, ylabel):
         """

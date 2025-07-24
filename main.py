@@ -4,7 +4,7 @@ import screeninfo
 import PySpin
 import numpy as np
 import cupy as cp
-from include.stereo_fringe_process import Stereo_Fringe_Process
+from include.stereo_fringe_process import FringeProcess
 from include.StereoCameraController import StereoCameraController
 from include.InverseTriangulation import InverseTriangulation
 
@@ -39,7 +39,7 @@ def main():
     cv2.moveWindow('projector', move[0], move[1])
     width_cam, height_cam = stereo_ctrl.camera_resolution()
     cam_resolution = (width_cam, height_cam)
-    stereo = Stereo_Fringe_Process(img_resolution=img_resolution, camera_resolution=cam_resolution, px_f=pixel_per_fringe, steps=steps)
+    stereo = FringeProcess(img_resolution=img_resolution, camera_resolution=cam_resolution, px_f=pixel_per_fringe, steps=steps)
 
     # Criar LUT baseada na relação linear
     lut = np.clip((np.arange(256) - b) / a, 0, 255).astype(np.uint8)

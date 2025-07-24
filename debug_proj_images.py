@@ -1,6 +1,6 @@
 import os
 import cv2
-from include.stereo_fringe_process import Stereo_Fringe_Process
+from include.stereo_fringe_process import FringeProcess
 
 
 def main():
@@ -14,7 +14,7 @@ def main():
     right_files = sorted(os.listdir(os.path.join(path, 'right')))
     # left_images = np.zeros((1200, 1600, len(left_files)), dtype=np.uint8)
     # right_images = np.zeros((1200, 1600, len(right_files)), dtype=np.uint8)
-    stereo = Stereo_Fringe_Process(px_f=pixel_per_fringe, steps=steps)
+    stereo = FringeProcess(px_f=pixel_per_fringe, steps=steps)
     for counter in range(len(left_files)):
         left_image = cv2.imread(os.path.join(path, 'left', left_files[counter]), 0)
         right_image = cv2.imread(os.path.join(path, 'right', right_files[counter]), 0)
